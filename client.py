@@ -17,13 +17,15 @@ def build_client(credentials: Credentials, session_basename: str) -> TelegramCli
     return TelegramClient(str(session_basename), credentials.api_id, credentials.api_hash)
 
 
-async def login(client: TelegramClient, phone: str) -> None:
+async def login(client: TelegramClient, phone: str = "") -> None:
     """Start the client, prompting for OTP and 2FA password if needed.
 
     Telethon's `start()` handles the interactive prompts in the terminal and
-    persists the session so later runs skip login entirely.
+    persists the session so later runs skip login entirely. If `phone` is empty
+    (e.g. you only logged in with a QR code and never set PHONE in .env),
+    Telethon prompts for the number in the terminal instead.
     """
-    await client.start(phone=phone)
+    await client.start(phone=phone or None)
 
 
 def session_file_exists(session_basename: str) -> bool:

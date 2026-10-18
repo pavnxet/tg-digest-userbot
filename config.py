@@ -80,10 +80,12 @@ class Credentials:
 
 
 def load_credentials(env_path: Path = ENV_PATH) -> Credentials:
-    """Load API_ID / API_HASH / PHONE from a .env file.
+    """Load API_ID / API_HASH from a .env file. PHONE is optional.
 
-    Raises a clear RuntimeError if anything is missing so the user is told
-    exactly what to fix, rather than getting an obscure Telethon error.
+    PHONE is only needed for the *terminal* phone login (``--terminal-login``).
+    If you logged in with a QR code, the saved session is enough, so PHONE is
+    not required here. Raises a clear RuntimeError if API_ID / API_HASH are
+    missing, so the user is told exactly what to fix.
     """
     load_dotenv(env_path)
 
@@ -93,7 +95,7 @@ def load_credentials(env_path: Path = ENV_PATH) -> Credentials:
 
     missing = [
         name
-        for name, value in (("API_ID", raw_id), ("API_HASH", api_hash), ("PHONE", phone))
+        for name, value in (("API_ID", raw_id), ("API_HASH", api_hash))
         if not value
     ]
     if missing:

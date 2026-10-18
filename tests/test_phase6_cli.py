@@ -52,12 +52,38 @@ def test_bad_format_choice_is_rejected():
 # --------------------------------------------------------------------------
 def test_missing_env_gives_friendly_error(tmp_path):
     env = tmp_path / ".env"
-    env.write_text("API_ID=1\n", encoding="utf-8")  # missing HASH and PHONE
+    env.write_text("API_ID=1\n", encoding="utf-8")  # missing API_HASH; PHONE is optional
     with pytest.raises(RuntimeError) as exc:
         config.load_credentials(env)
     message = str(exc.value)
-    assert "API_HASH" in message and "PHONE" in message
+    assert "API_HASH" in message
     assert "Traceback" not in message
+
+
+def test_phone_is_optional_after_qr_login(tmp_path):
+    # The QR-login .env has no PHONE; loading credentials must still succeed.
+    env = tmp_path / ".env"
+    env.write_text("API_ID=1\nAPI_HASH=h\nBOT_TOKEN=t\nOWNER_ID=1\n", encoding="utf-8")
+    credentials = config.load_credentials(env)
+    assert credentials.api_id == 1 and credentials.api_hash == "h"
+    assert credentials.phone == ""
+
+
+def test_login_without_phone_lets_telethon_prompt():
+    import asyncio
+
+    from client import login
+
+    class FakeClient:
+        def __init__(self):
+            self.phone = "unset"
+
+        async def start(self, phone=None):
+            self.phone = phone
+
+    fake = FakeClient()
+    asyncio.run(login(fake, ""))
+    assert fake.phone is None          # -> Telethon prompts in the terminal
 
 
 def test_non_integer_api_id_errors(tmp_path):
