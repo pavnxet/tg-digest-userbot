@@ -51,3 +51,15 @@ def test_start_replies_with_the_help_text(tmp_path):
     assert bot.sent[-1][1] == HELP_TEXT
     asyncio.run(app.handle(FakeEvent(bot, "/help", OWNER)))
     assert "/panic" in bot.sent[-1][1]
+
+
+def test_bot_client_sends_plain_text(monkeypatch, tmp_path):
+    # Telethon's default parse mode is Markdown, which on some versions pairs the
+    # '_' in '/login_phone' and '/set summary_prompt' into italics and mangles the
+    # help text. The bot must send plain text.
+    import bot
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(bot, "BOT_SESSION_BASENAME", str(tmp_path / "bot"))
+    client = bot.build_bot_client(SimpleNamespace(api_id=1, api_hash="h"))
+    assert client.parse_mode is None

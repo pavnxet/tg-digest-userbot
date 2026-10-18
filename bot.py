@@ -49,8 +49,15 @@ SWEEP_INTERVAL_SECONDS = 30
 
 
 def build_bot_client(settings) -> TelegramClient:
-    """The bot's own client, on its own session file (separate from the user's)."""
-    return TelegramClient(BOT_SESSION_BASENAME, settings.api_id, settings.api_hash)
+    """The bot's own client, on its own session file (separate from the user's).
+
+    ``parse_mode = None`` makes every message plain text: the help/usage text is
+    full of ``_`` (e.g. ``/login_phone``) and ``<...>`` placeholders, which
+    Telethon's default Markdown parser would otherwise eat or mangle.
+    """
+    client = TelegramClient(BOT_SESSION_BASENAME, settings.api_id, settings.api_hash)
+    client.parse_mode = None
+    return client
 
 
 async def _timeout_sweeper(app: BotApp) -> None:
