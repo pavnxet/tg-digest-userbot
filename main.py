@@ -209,6 +209,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--per-channel-files", action="store_true", help="one output file per channel")
     parser.add_argument("--summary-prompt-file", help="override the default ai_instructions text")
     parser.add_argument("--resume", action="store_true", help="continue a run that stopped midway")
+    parser.add_argument("--terminal-login", action="store_true",
+                        help="allow interactive OTP/2FA login in the terminal if not logged in")
     parser.add_argument("--dry-run", action="store_true",
                         help="report channels and counts without writing any file")
     parser.add_argument("--channels-file", default=str(CHANNELS_PATH))
@@ -288,6 +290,19 @@ async def run(args: argparse.Namespace) -> int:
 
     credentials = load_credentials()
     client = build_client(credentials, SESSION_BASENAME)
+    if not args.terminal_login:
+        authorized = False
+        try:
+            await client.connect()
+            authorized = await client.is_user_authorized()
+        except Exception:  # noqa: BLE001 - any failure means "assume not logged in"
+            authorized = False
+        finally:
+            await client.disconnect()
+        if not authorized:
+            print("Not logged in. Start `python bot.py` and send /login to the bot, "
+                  "or run with --terminal-login.")
+            return 2
     await login(client, credentials.phone)
 
     try:

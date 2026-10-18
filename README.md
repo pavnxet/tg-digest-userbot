@@ -63,11 +63,18 @@ secrets never get committed.
 
 ## 3. First-time login
 
-The first run logs you in interactively and saves a `tg_digest.session` file, so
-you never log in again:
+Login is now normally done **from a chat with your own control bot** (section 3b),
+so the OTP/2FA never has to be typed in a terminal. If no valid session exists,
+`main.py` prints a clear message instead of prompting:
+
+```
+Not logged in. Start `python bot.py` and send /login to the bot, or run with --terminal-login.
+```
+
+The old terminal login is still available behind a flag:
 
 ```bash
-python main.py --today
+python main.py --today --terminal-login
 ```
 
 You will be asked, in the terminal, for:
@@ -76,6 +83,79 @@ You will be asked, in the terminal, for:
 2. your **two-factor (2FA) password**, *only if* you have 2FA enabled.
 
 After that, later runs are silent.
+
+---
+
+## 3b. Control bot: log in, check status, log out from chat
+
+A small bot (created via @BotFather) through which you can log your account in,
+check `/status`, and `/logout` — all from a private chat. It is **owner-only**:
+everyone else is silently ignored.
+
+### Create the bot
+
+1. Open Telegram, talk to **@BotFather**, send `/newbot`, and follow the prompts.
+2. BotFather replies with a **token** like `123456789:AA...`. Put it in `.env`:
+
+   ```
+   BOT_TOKEN=123456789:AA...
+   ```
+3. Start it:
+
+   ```bash
+   python bot.py
+   ```
+
+### Pairing (first run)
+
+Set `OWNER_ID` in `.env` to your numeric Telegram user id, **or** leave it blank
+to pair on first run. With pairing, `bot.py` prints a random code in the
+**terminal only**:
+
+```
+Pairing code (terminal only): 3f9a1c2b
+Send  /claim <code>  to your bot in a private chat.
+```
+
+Send `/claim 3f9a1c2b` to the bot from your own account. The first user to do so
+becomes the owner; the code is then dead forever. The code is never shown in the
+chat.
+
+### Commands
+
+| Command | What it does |
+|---|---|
+| `/start`, `/help` | Short usage |
+| `/login` | **QR login** (default). Scans a QR from a second device's Telegram (Settings > Devices > Link Desktop Device). The QR is refreshed up to 3 times, ~2–3 minutes. |
+| `/login_phone` | Phone + code login (fallback). See the warning below. |
+| `/status` | Logged in? Shows the first name and only the **last 2 digits** of the phone. |
+| `/logout` | Confirms with a button, then logs out on Telegram's side and deletes the local session file. |
+| `/cancel` | Aborts any in-progress login and clears all state. |
+
+**Which method?** Use `/login` (QR) whenever you have a second device or screen —
+it never puts the login code through the chat. Use `/login_phone` only if you
+cannot scan a QR, and expect that Telegram **may reject a code sent through a
+chat**; if that happens the bot will tell you and point you back to QR or the
+terminal.
+
+### Security (short version)
+
+- The bot chat is **not** end-to-end encrypted; anything you type is stored on
+  Telegram's servers until deleted. The bot deletes your phone/code/password
+  messages immediately, but deletion is best-effort.
+- **For the 2FA password, the terminal is safest** (`python main.py
+  --terminal-login`) — nothing goes through a chat.
+- Only your numeric user id is served; non-owner messages get no reply.
+- Full threat model and the secrets inventory: [`docs/SECURITY.md`](docs/SECURITY.md).
+
+### Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `database is locked` when the bot reports status | A scraper run is using `tg_digest.session`. Wait for it to finish; the bot retries cleanly. |
+| QR will not scan | Make sure the QR is being opened from a **second device's** Telegram (Settings > Devices > Link Desktop Device), and that you scan while the bot is still waiting. Try `/login` again. |
+| Code rejected right after typing | Telegram may block codes sent through chat. Use `/login` (QR) or `--terminal-login`. |
+| `/claim` does nothing | Wrong code, or the code was already used. Restart `bot.py` to print a fresh code (only if not yet paired). |
 
 ---
 

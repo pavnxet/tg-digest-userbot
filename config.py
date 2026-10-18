@@ -25,6 +25,12 @@ LOG_DIR: Path = ROOT_DIR / "logs"
 # Telethon appends ".session" itself, so this is the basename, not a file.
 SESSION_BASENAME: str = str(ROOT_DIR / "tg_digest")
 
+# Control bot (created via @BotFather). Its session is separate from the user's.
+BOT_SESSION_BASENAME: str = str(ROOT_DIR / "bot")
+OWNER_FILE: Path = ROOT_DIR / "owner.json"
+BOT_LOG: Path = LOG_DIR / "bot.log"
+PAIRING_CODE_BYTES: int = 4  # -> 8 hex characters, printed to the terminal only
+
 # --------------------------------------------------------------------------
 # Defaults (all overridable from the command line)
 # --------------------------------------------------------------------------
@@ -99,3 +105,53 @@ def ensure_directories() -> None:
     """Create the runtime directories if they do not exist yet."""
     for directory in (OUTPUT_DIR, CACHE_DIR, LOG_DIR):
         directory.mkdir(parents=True, exist_ok=True)
+
+
+@dataclass(frozen=True)
+class BotSettings:
+    """Everything the control bot needs from the environment.
+
+    `owner_id` is optional: when absent the bot falls back to one-time pairing.
+    """
+
+    api_id: int
+    api_hash: str
+    bot_token: str
+    owner_id: "int | None" = None
+    phone: str = ""
+
+
+def load_bot_settings(env_path: Path = ENV_PATH) -> BotSettings:
+    """Load API_ID / API_HASH / BOT_TOKEN (and optional OWNER_ID) from .env."""
+    load_dotenv(env_path)
+
+    raw_id = (os.getenv("API_ID") or "").strip()
+    api_hash = (os.getenv("API_HASH") or "").strip()
+    bot_token = (os.getenv("BOT_TOKEN") or "").strip()
+    raw_owner = (os.getenv("OWNER_ID") or "").strip()
+    phone = (os.getenv("PHONE") or "").strip()
+
+    missing = [
+        name
+        for name, value in (("API_ID", raw_id), ("API_HASH", api_hash), ("BOT_TOKEN", bot_token))
+        if not value
+    ]
+    if missing:
+        raise RuntimeError(
+            f"Missing {', '.join(missing)} in {env_path}. "
+            "Copy .env.example to .env and fill in your credentials."
+        )
+
+    try:
+        api_id = int(raw_id)
+    except ValueError as exc:
+        raise RuntimeError("API_ID must be an integer (e.g. 1234567).") from exc
+
+    owner_id = None
+    if raw_owner:
+        try:
+            owner_id = int(raw_owner)
+        except ValueError as exc:
+            raise RuntimeError("OWNER_ID must be a numeric Telegram user id.") from exc
+
+    return BotSettings(api_id=api_id, api_hash=api_hash, bot_token=bot_token, owner_id=owner_id, phone=phone)

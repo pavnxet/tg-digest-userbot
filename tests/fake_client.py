@@ -226,6 +226,13 @@ class FakeTelegramClient:
         self.calls.append(("start",))
         return self
 
+    async def connect(self):  # used by main.py's login gate
+        self.calls.append(("connect",))
+
+    async def is_user_authorized(self):  # used by main.py's login gate
+        self.calls.append(("is_user_authorized",))
+        return True
+
     async def disconnect(self):  # pragma: no cover
         self.disconnected = True
 

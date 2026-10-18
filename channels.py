@@ -78,7 +78,7 @@ def parse_channel_line(line: str) -> Optional[ChannelSpec]:
     # Normalise a URL to a bare target: drop scheme, host, query and fragment.
     target = _SCHEME_RE.sub("", body)
     target = _HOST_RE.sub("", target)
-    target = re.split(r"[?#]", target, 1)[0].strip().rstrip("/")
+    target = re.split(r"[?#]", target, maxsplit=1)[0].strip().rstrip("/")
     if target.startswith("@"):
         target = target[1:]
     if not target:

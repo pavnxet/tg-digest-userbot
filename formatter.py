@@ -85,9 +85,7 @@ def clean(obj: Any) -> Any:
 def _is_empty(value: Any) -> bool:
     if value is None or value is False or value == "":
         return True
-    if isinstance(value, (list, dict)) and len(value) == 0:
-        return True
-    return False
+    return bool(isinstance(value, (list, dict)) and len(value) == 0)
 
 
 def dumps_compact(obj: Any) -> str:
@@ -169,7 +167,7 @@ def estimate_tokens(text: str) -> dict[str, Any]:
     return {
         "chars": chars,
         "devanagari_ratio": round(ratio, 3),
-        "est_tokens_latin": int(round(latin_estimate)),
-        "est_tokens_devanagari": int(round(devanagari_estimate)),
-        "est_tokens_primary": int(round(primary)),
+        "est_tokens_latin": round(latin_estimate),
+        "est_tokens_devanagari": round(devanagari_estimate),
+        "est_tokens_primary": round(primary),
     }
