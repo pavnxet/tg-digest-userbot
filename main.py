@@ -58,6 +58,7 @@ from formatter import (
     to_txt,
 )
 from logging_setup import setup_logging
+from prompts import PromptError, available_names, default_prompt, load_prompt
 from scraper import ScrapeOptions, count_channel, scrape_channel
 from splitter import split_digest
 from timeutil import get_tz, resolve_window
@@ -209,6 +210,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pretty", action="store_true", help="indent=2 (for reading, not for AI)")
     parser.add_argument("--per-channel-files", action="store_true", help="one output file per channel")
     parser.add_argument("--summary-prompt-file", help="override the default ai_instructions text")
+    parser.add_argument("--summary-prompt", default=None,
+                        help="name of a prompt in prompts/ to embed as ai_instructions (default: default)")
     parser.add_argument("--resume", action="store_true", help="continue a run that stopped midway")
     parser.add_argument("--terminal-login", action="store_true",
                         help="allow interactive OTP/2FA login in the terminal if not logged in")
@@ -229,8 +232,10 @@ async def run(args: argparse.Namespace) -> int:
     log = setup_logging(LOG_DIR / "run.log", verbose=args.verbose)
     tz = get_tz(args.timezone)
 
-    ai_instructions = DEFAULT_AI_INSTRUCTIONS
+    ai_instructions = default_prompt(DEFAULT_AI_INSTRUCTIONS)
     if args.summary_prompt_file:
+        if args.summary_prompt:
+            print("Note: --summary-prompt-file overrides --summary-prompt.")
         try:
             prompt_text = Path(args.summary_prompt_file).read_text(encoding="utf-8").strip()
         except OSError as exc:
@@ -240,6 +245,14 @@ async def run(args: argparse.Namespace) -> int:
             ai_instructions = prompt_text
         else:
             print("Warning: --summary-prompt-file is empty; using the default ai_instructions.")
+    elif args.summary_prompt and args.summary_prompt != "default":
+        try:
+            ai_instructions = load_prompt(args.summary_prompt)
+        except PromptError as exc:
+            print(f"Error: {exc}")
+            names = available_names()
+            print("Available prompts: " + (", ".join(names) if names else "(none)"))
+            return 2
 
     # Validate the output directory up front (before any network work).
     out_dir = Path(args.output_dir)

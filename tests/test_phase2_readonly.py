@@ -34,6 +34,7 @@ SCRAPER_MODULES = [
     "schedule_store.py",
     "files_store.py",
     "run_args.py",
+    "prompts.py",
 ]
 
 # Files allowed to send/edit/delete: the bot client lives here.
@@ -46,6 +47,7 @@ BOT_MODULES = [
     "bot_settings.py",
     "bot_files.py",
     "bot_health.py",
+    "bot_prompts.py",
 ]
 
 # The wrapper is the only place the user client is touched.

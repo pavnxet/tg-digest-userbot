@@ -11,12 +11,14 @@ REGISTERED = {
     "start", "help", "login", "login_phone", "status", "logout", "cancel",
     "channels", "add", "remove", "pause", "resume", "tag", "untag", "groups",
     "run", "stop", "preview", "last", "schedule", "settings", "set",
+    "prompts", "prompt",
     "files", "clean", "find", "health", "panic",
 }
 
 
 def test_help_mentions_every_command_group():
-    for token in ["/channels", "/add", "/run", "/stop", "/schedule", "/settings", "/files", "/health", "/panic"]:
+    for token in ["/channels", "/add", "/run", "/stop", "/schedule", "/settings",
+                  "/prompts", "/prompt", "/files", "/health", "/panic"]:
         assert token in HELP_TEXT, f"{token} missing from HELP_TEXT"
 
 

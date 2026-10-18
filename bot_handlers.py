@@ -82,6 +82,9 @@ HELP_TEXT = (
     "Settings & files\n"
     "/settings · /set <key> <value>\n"
     "/files · /clean · /find <keyword> [6h|24h|3d]\n\n"
+    "Prompts\n"
+    "/prompts — list prompts · /prompt <name> — show one\n"
+    "/set summary_prompt <name> — choose the embedded prompt\n\n"
     "Health\n"
     "/health · /panic\n\n"
     "2FA password के लिए terminal login सबसे सुरक्षित है।"
@@ -112,6 +115,8 @@ COMMAND_MENU = (
     ("schedule", "scheduled runs"),
     ("settings", "सेटिंग्स देखें"),
     ("set", "सेटिंग बदलें"),
+    ("prompts", "prompt सूची"),
+    ("prompt", "prompt दिखाएँ"),
     ("files", "outputs सूची"),
     ("clean", "पुरानी files हटाएँ"),
     ("find", "digest में खोजें"),
@@ -180,6 +185,10 @@ class BotApp:
             from bot_settings import SettingsPanel
 
             self._settings_panel = SettingsPanel(self, settings)
+        if settings is not None:
+            from bot_prompts import PromptPanel
+
+            self._prompt_panel = PromptPanel(self, settings)
         if schedule_store is not None:
             from bot_schedule import SchedulePanel, Scheduler
 

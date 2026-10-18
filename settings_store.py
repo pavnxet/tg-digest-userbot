@@ -11,6 +11,8 @@ import logging
 from pathlib import Path
 from typing import Any, Callable
 
+from prompts import available_names
+
 _log = logging.getLogger("tgdigest.bot.settings")
 
 DEFAULTS: dict[str, Any] = {
@@ -22,7 +24,17 @@ DEFAULTS: dict[str, Any] = {
     "autodelete_minutes": 0,
     "retention_days": 7,
     "max_per_channel": 5000,
+    "summary_prompt": "default",
 }
+
+
+def _prompt_choice(value: str) -> str:
+    """A prompt name that must exist in prompts/."""
+    name = str(value).strip()
+    names = available_names()
+    if name not in names:
+        raise ValueError("उपलब्ध prompts: " + (", ".join(names) if names else "कोई नहीं"))
+    return name
 
 
 def _choice(options: tuple[str, ...]) -> Callable[[str], Any]:
@@ -57,6 +69,7 @@ VALIDATORS: dict[str, Callable[[str], Any]] = {
     "autodelete_minutes": _int_range(0, 1440),
     "retention_days": _int_range(1, 60),
     "max_per_channel": _int_range(100, 20_000),
+    "summary_prompt": _prompt_choice,
 }
 
 
@@ -117,4 +130,7 @@ class SettingsStore:
             flags += ["--min-chars", str(self.get("min_chars"))]
         if self.get("with_views") == "on":
             flags.append("--with-views")
+        # The prompt name is validated on set/load, so only a real prompts/ name
+        # can ever reach argv here (chat text cannot add this flag).
+        flags += ["--summary-prompt", str(self.get("summary_prompt"))]
         return flags

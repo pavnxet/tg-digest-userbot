@@ -242,6 +242,41 @@ servers (see `docs/SECURITY.md`).
 
 ---
 
+## 3d. Summarising a digest
+
+This tool **never calls an AI service**. It writes the digest JSON with an
+`ai_instructions` field embedded, and *you* decide where to paste it.
+
+Three ways to use it:
+
+1. **Quick** — open the digest file in any AI chat. The embedded
+   `ai_instructions` (from `prompts/default.md`) already tells the model what to do.
+2. **Stronger prompt** — pick another one:
+   `python main.py --today --summary-prompt detailed`, or from the bot
+   `/set summary_prompt exam_alerts` (then `/run ...` uses it). `/prompts` lists
+   them and `/prompt <name>` shows one.
+3. **Several parts** — if a digest was split, summarise each part on its own, then
+   give the AI the `merge_parts` prompt plus the part summaries. For a single
+   question, paste the `ask` prompt, put your question after `QUESTION:`, and
+   attach the JSON.
+
+Available prompts: `default`, `detailed`, `exam_alerts`, `news_brief`,
+`merge_parts`, `ask`.
+
+> **Privacy:** a digest can contain private channel content. Whatever AI service
+> you paste it into will receive that content. **The bot itself never contacts any
+> AI service** — it only stores, selects and embeds prompt text.
+
+### Adding your own prompt
+
+Drop a `.md` file into `prompts/`. The first line must be
+`# <name> - <description>` (the name is the filename without `.md`; lowercase
+letters, digits, `_` and `-`). Keep the file under 8000 characters. It then shows
+up in `/prompts` and can be selected with `--summary-prompt <name>` or
+`/set summary_prompt <name>`.
+
+---
+
 ## 4. Choose your channels
 
 ```bash

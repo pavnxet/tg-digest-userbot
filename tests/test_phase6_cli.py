@@ -192,13 +192,16 @@ def _load(project):
 
 
 def test_empty_prompt_file_falls_back_to_default(project, fake_client, monkeypatch):
+    from prompts import load_prompt
+
     ch = make_channel(1234567890, "News", username="news")
     fake_client.add_channel(ch, [_now_message()])
     empty = project["tmp"] / "empty.txt"
     empty.write_text("   \n", encoding="utf-8")
     run_main(monkeypatch, project, fake_client,
              ["--last", "1h", "--summary-prompt-file", str(empty)], "@news\n")
-    assert _load(project)["ai_instructions"] == config.DEFAULT_AI_INSTRUCTIONS
+    # the fallback is the file-based default prompt, not the old built-in text
+    assert _load(project)["ai_instructions"] == load_prompt("default")
 
 
 def test_custom_prompt_file_overrides_default(project, fake_client, monkeypatch):
