@@ -49,6 +49,7 @@ DEFAULT_AI_INSTRUCTIONS: str = (
     "(3) list deadlines, dates and action items separately; "
     "(4) if the same news appears in several channels, mention it once and say "
     "which channels carried it. "
+    "A channel marked truncated:true hit a per-channel cap, so its messages may be incomplete. "
     "Do not add anything that is not in the messages, and flag anything you are "
     "unsure about. Respond in Hindi."
 )

@@ -59,13 +59,13 @@ def parse_local_datetime(text: str, tz) -> datetime:
 
 @dataclass(frozen=True)
 class Window:
-    """A half-open time window in UTC: since <= t <= until."""
+    """A half-open time window in UTC: since <= t < until (end exclusive)."""
 
     since: datetime  # timezone-aware UTC
     until: datetime  # timezone-aware UTC
 
     def contains(self, moment: datetime) -> bool:
-        return self.since <= moment <= self.until
+        return self.since <= moment < self.until
 
 
 def _as_utc(moment: datetime) -> datetime:

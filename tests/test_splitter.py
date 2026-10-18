@@ -1,7 +1,7 @@
 """Splitting: every part must be valid, standalone JSON."""
 import json
 
-from formatter import build_digest, dumps_compact
+from formatter import dumps_compact
 from splitter import split_digest
 
 

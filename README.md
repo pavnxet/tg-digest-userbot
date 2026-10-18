@@ -184,6 +184,13 @@ Default file: `output/digest_<YYYY-MM-DD_HHMM>.json`, UTF-8, compact.
 `https://t.me/c/<internal_id>/` (the `-100` prefix removed). A message link is
 `link_base + id`. Full URLs are **not** repeated on every message.
 
+**Truncation:** if a channel hits `--max-per-channel`, its object gets
+`"truncated": true` and `"cap": N`, and its name is listed in
+`meta.truncated_channels` — so a digest is never silently incomplete. These
+fields are omitted entirely when nothing was truncated (to save tokens). The
+time window is **start-inclusive, end-exclusive**: a message exactly at `since`
+is included, one exactly at `until` is not.
+
 Other formats:
 
 * `--format jsonl` — first line is `ai_instructions` + `meta`, then one line per

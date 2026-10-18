@@ -6,6 +6,7 @@ Nothing here ever sends, reacts, or marks anything as read.
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
@@ -34,6 +35,8 @@ from telethon.tl.types import (
 from formatter import ist_str, normalize_text
 
 ProgressCallback = Optional[Callable[[int], None]]
+
+_log = logging.getLogger("tgdigest.scraper")
 
 
 @dataclass
@@ -103,8 +106,8 @@ def extract_links(message: Any) -> list[str]:
             url = getattr(entity, "url", None)
             if url and url not in urls:
                 urls.append(url)
-    except Exception:
-        pass
+    except Exception:  # noqa: BLE001 - a malformed entity must not break extraction
+        _log.debug("could not read hyperlink entities from a message")
 
     media = getattr(message, "media", None)
     if isinstance(media, MessageMediaWebPage):
@@ -136,12 +139,32 @@ def extract_author(message: Any) -> Optional[str]:
     return None
 
 
+def _as_text(value: Any) -> Optional[str]:
+    """Poll question/answer fields are TypeTextWithEntities.
+
+    That union is either a plain ``str`` or a ``TextWithEntities`` object whose
+    ``.text`` holds the string, so support both.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value or None
+    text = getattr(value, "text", None)
+    return text or None
+
+
 def extract_poll(message: Any) -> Optional[dict[str, Any]]:
-    poll = getattr(message, "poll", None)
+    # message.poll is the MessageMediaPoll *wrapper*; the real Poll is inside it.
+    media = getattr(message, "media", None)
+    if not isinstance(media, MessageMediaPoll):
+        return None
+    poll = getattr(media, "poll", None)
     if poll is None:
         return None
-    question = getattr(poll, "question", None)
-    options = [a.text for a in (getattr(poll, "answers", None) or []) if getattr(a, "text", None)]
+
+    question = _as_text(getattr(poll, "question", None))
+    options = [_as_text(a.text) for a in (getattr(poll, "answers", None) or [])]
+    options = [option for option in options if option]
     if not question and not options:
         return None
     return {"question": question, "options": options}
@@ -173,7 +196,10 @@ def normalize_message(message: Any, opts: ScrapeOptions) -> Optional[dict[str, A
     if not text and not poll:
         return None  # nothing readable (e.g. a bare sticker or an empty album item)
 
-    result: dict[str, Any] = {"id": message.id, "t": ist_str(to_utc(message.date), opts.tz)}
+    moment = to_utc(getattr(message, "date", None))
+    if moment is None:
+        return None
+    result: dict[str, Any] = {"id": message.id, "t": ist_str(moment, opts.tz)}
     if text:
         result["text"] = text
 
@@ -318,19 +344,23 @@ async def _collect(
     window: Any,
     opts: ScrapeOptions,
     progress: ProgressCallback,
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], bool]:
     collected: list[dict[str, Any]] = []
     scanned = 0
+    truncated = False
 
     # Newest -> oldest; stop the moment we pass the window start.
     async for message in client.iter_messages(resolved.entity, offset_date=window.until):
         moment = to_utc(getattr(message, "date", None))
         if moment is None:
             continue
-        if moment < window.since:
-            break
+        if not window.contains(moment):  # single source of truth: [since, until)
+            if moment < window.since:
+                break
+            continue
         scanned += 1
         if opts.max_per_channel and scanned > opts.max_per_channel:
+            truncated = True  # there is at least one more message we are not reading
             break
         if progress is not None:
             progress(1)
@@ -346,7 +376,7 @@ async def _collect(
         collected = dedupe_messages(collected)
     if opts.min_chars:
         collected = filter_min_chars(collected, opts.min_chars)
-    return collected
+    return collected, truncated
 
 
 async def scrape_channel(
@@ -355,11 +385,16 @@ async def scrape_channel(
     window: Any,
     opts: ScrapeOptions,
     progress: ProgressCallback = None,
-) -> tuple[Optional[list[dict[str, Any]]], Optional[str]]:
-    """Read one channel. Returns (messages, None) or (None, reason)."""
+) -> tuple[Optional[list[dict[str, Any]]], Optional[str], bool]:
+    """Read one channel. Returns (messages, reason, truncated).
+
+    reason is None on success. Any error becomes a short reason string so a
+    single bad channel is recorded in meta.skipped and the run continues.
+    """
     for attempt in range(3):
         try:
-            return await _collect(client, resolved, window, opts, progress), None
+            collected, truncated = await _collect(client, resolved, window, opts, progress)
+            return collected, None, truncated
 
         except FloodWaitError as exc:
             seconds = exc.seconds
@@ -369,18 +404,24 @@ async def scrape_channel(
             if seconds <= opts.max_flood_wait:
                 await asyncio.sleep(seconds + 2)
                 continue
-            return None, "flood_wait"
+            return None, "flood_wait", False
 
         except (ChannelPrivateError, ChannelBannedError, ChatAdminRequiredError):
-            return None, "no_access"
+            return None, "no_access", False
 
         except (ConnectionError, TimeoutError, OSError) as exc:
             if attempt == 2:
-                return None, f"network:{type(exc).__name__}"
+                return None, f"network:{type(exc).__name__}", False
             await asyncio.sleep(2 ** attempt)  # 1s, 2s, then give up
             continue
 
-    return None, "flood_wait"
+        except Exception as exc:  # noqa: BLE001 - one bad channel must never kill the run
+            # NB: KeyboardInterrupt / SystemExit / asyncio.CancelledError are
+            # BaseException, not Exception, so they still propagate and stop the
+            # run cleanly (checkpoint kept, state.json untouched).
+            return None, f"unexpected_error:{type(exc).__name__}", False
+
+    return None, "flood_wait", False
 
 
 async def count_channel(
@@ -396,11 +437,13 @@ async def count_channel(
             moment = to_utc(getattr(message, "date", None))
             if moment is None:
                 continue
-            if moment < window.since:
-                break
+            if not window.contains(moment):
+                if moment < window.since:
+                    break
+                continue
             count += 1
             if opts.max_per_channel and count >= opts.max_per_channel:
                 break
-    except Exception:
+    except Exception:  # noqa: BLE001 - dry-run count is best-effort
         return count
     return count

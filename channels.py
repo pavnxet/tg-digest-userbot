@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import random
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -26,14 +26,17 @@ from telethon.errors import (
 )
 from telethon.tl.functions.channels import GetParticipantRequest
 from telethon.tl.functions.messages import CheckChatInviteRequest, ImportChatInviteRequest
-from telethon.tl.types import Channel, Chat, ChatInvite, ChatInviteAlready
+from telethon.tl.types import Channel, Chat, ChatInviteAlready
 
 from config import JOIN_WAIT_MAX_SECONDS, JOIN_WAIT_MIN_SECONDS
 from formatter import build_link_base
 
-_INVITE_RE = re.compile(r"(?:t\.me/)?(?:joinchat/|\+)([A-Za-z0-9_-]+)")
-_USERNAME_RE = re.compile(r"^(?:https?://t\.me/|@)([A-Za-z0-9_]{4,})/?$", re.IGNORECASE)
+_SCHEME_RE = re.compile(r"^https?://", re.IGNORECASE)
+_HOST_RE = re.compile(r"^(?:www\.)?(?:t\.me|telegram\.me)/", re.IGNORECASE)
+_INVITE_HASH_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+_USERNAME_RE = re.compile(r"^[A-Za-z0-9_]+$")
 _NUMERIC_RE = re.compile(r"^-?\d+$")
+_PRIVATE_POST_RE = re.compile(r"^c/(\d+)(?:/\d+)?$")
 
 
 # --------------------------------------------------------------------------
@@ -44,44 +47,77 @@ class ChannelSpec:
     """One line of channels.txt, parsed."""
 
     raw: str
-    kind: str  # "username" | "invite" | "id"
+    kind: str  # "username" | "invite" | "id" | "invalid"
     value: str
     label: Optional[str] = None
 
 
 def parse_channel_line(line: str) -> Optional[ChannelSpec]:
-    """Parse a single line. Returns None for comments and blank lines."""
-    line = line.strip()
-    if not line or line.startswith("#"):
+    """Parse a single line. Returns None for comments and blank lines.
+
+    Accepts: ``@name``, ``https://t.me/name``, scheme-less ``t.me/name``,
+    optional query/fragment, a trailing ``/``, a post link ``name/123``, a
+    private post link ``c/<id>/<msg>``, private invites (``+hash`` /
+    ``joinchat/hash``) and numeric ids. Unparseable non-empty lines become an
+    ``invalid`` spec (reported later as ``invalid_entry``), never silently
+    dropped.
+    """
+    raw = line.strip().lstrip("\ufeff").strip()
+    if not raw or raw.startswith("#"):
         return None
 
     label: Optional[str] = None
-    if "|" in line:
-        line, label = line.split("|", 1)
-        line = line.strip()
+    body = raw
+    if "|" in body:
+        body, label = body.split("|", 1)
+        body = body.strip()
         label = label.strip() or None
-
-    if not line:
+    if not body:
         return None
 
-    invite = _INVITE_RE.search(line)
-    if invite and ("+" in line or "joinchat" in line.lower()):
-        return ChannelSpec(line, "invite", invite.group(1), label)
+    # Normalise a URL to a bare target: drop scheme, host, query and fragment.
+    target = _SCHEME_RE.sub("", body)
+    target = _HOST_RE.sub("", target)
+    target = re.split(r"[?#]", target, 1)[0].strip().rstrip("/")
+    if target.startswith("@"):
+        target = target[1:]
+    if not target:
+        # Non-empty line that yields no target (e.g. "https://t.me/" or "???").
+        return ChannelSpec(raw, "invalid", body, label)
 
-    username = _USERNAME_RE.match(line)
-    if username:
-        return ChannelSpec(line, "username", username.group(1), label)
+    # Private invite links.
+    if target.startswith("+"):
+        hash_ = target[1:]
+        return ChannelSpec(raw, "invite", hash_, label) if _INVITE_HASH_RE.match(hash_) \
+            else ChannelSpec(raw, "invalid", target, label)
+    if target.lower().startswith("joinchat/"):
+        hash_ = target.split("/", 1)[1]
+        return ChannelSpec(raw, "invite", hash_, label) if _INVITE_HASH_RE.match(hash_) \
+            else ChannelSpec(raw, "invalid", target, label)
 
-    if _NUMERIC_RE.match(line):
-        return ChannelSpec(line, "id", line, label)
+    # Private post link c/<id>/<msg> -> the channel id (-100<id>).
+    private = _PRIVATE_POST_RE.match(target)
+    if private:
+        return ChannelSpec(raw, "id", f"-100{private.group(1)}", label)
 
-    # Last resort: treat a bare word as a username.
-    return ChannelSpec(line, "username", line.lstrip("@"), label)
+    # Numeric id (checked before username, since digits also match it).
+    if _NUMERIC_RE.match(target):
+        return ChannelSpec(raw, "id", target, label)
+
+    # Public username, optionally with a /<post id> suffix.
+    username = target.split("/", 1)[0]
+    if _USERNAME_RE.match(username):
+        return ChannelSpec(raw, "username", username, label)
+
+    return ChannelSpec(raw, "invalid", target, label)
 
 
 def parse_channels_file(path: Path) -> list[ChannelSpec]:
-    """Read channels.txt into a list of specs, preserving order."""
-    text = Path(path).read_text(encoding="utf-8")
+    """Read channels.txt into a list of specs, preserving order.
+
+    ``utf-8-sig`` transparently strips a UTF-8 BOM; ``splitlines`` handles CRLF.
+    """
+    text = Path(path).read_text(encoding="utf-8-sig")
     specs: list[ChannelSpec] = []
     for line in text.splitlines():
         spec = parse_channel_line(line)
@@ -112,7 +148,7 @@ class JoinState:
         if self.joins >= self.max_joins:
             raise JoinBudgetExceeded(f"max_joins={self.max_joins} reached")
         if self.joins > 0:
-            await asyncio.sleep(random.uniform(self.wait_min, self.wait_max))
+            await asyncio.sleep(random.uniform(self.wait_min, self.wait_max))  # nosec B311 - join jitter
 
     def record_join(self) -> None:
         self.joins += 1
@@ -168,7 +204,7 @@ async def _is_member(client: TelegramClient, entity) -> bool:
     try:
         await client(GetParticipantRequest(channel=entity, participant="me"))
         return True
-    except Exception:
+    except Exception:  # noqa: BLE001 - any error here just means "not a member"
         return False
 
 
@@ -198,7 +234,7 @@ async def _resolve_invite(
 
     try:
         updates = await client(ImportChatInviteRequest(spec.value))
-    except Exception as exc:  # keep the run alive no matter what
+    except Exception as exc:  # noqa: BLE001 - keep the run alive no matter what
         return Resolved(spec, False, reason=f"join_failed:{type(exc).__name__}")
 
     join_state.record_join()
@@ -213,6 +249,8 @@ async def resolve_spec(
 ) -> Resolved:
     """Resolve one spec to a readable entity, or a Resolved(reason=...)."""
     try:
+        if spec.kind == "invalid":
+            return Resolved(spec, False, reason="invalid_entry")
         if spec.kind == "invite":
             return await _resolve_invite(client, spec, join_state)
 
@@ -241,5 +279,5 @@ async def resolve_spec(
         return Resolved(spec, False, reason="banned")
     except ValueError:
         return Resolved(spec, False, reason="not_found")
-    except Exception as exc:  # never let one bad line kill the run
+    except Exception as exc:  # noqa: BLE001 - never let one bad line kill the run
         return Resolved(spec, False, reason=f"error:{type(exc).__name__}")

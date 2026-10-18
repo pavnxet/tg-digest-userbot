@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from timeutil import (
-    Window,
     get_tz,
     parse_duration,
     parse_local_datetime,

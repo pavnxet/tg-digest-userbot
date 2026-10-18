@@ -17,3 +17,8 @@ __pycache__/
 .venv/
 venv/
 env/
+
+# Coverage
+.coverage
+coverage.xml
+cov*.json

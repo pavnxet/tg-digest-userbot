@@ -15,15 +15,15 @@ import random
 import re
 import sys
 from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from tqdm import tqdm
 
 import config
 import state as state_mod
 from channels import (
-    JoinBudgetExceeded,
     JoinState,
     parse_channels_file,
     resolve_spec,
@@ -114,6 +114,28 @@ def render_part(part: dict[str, Any], fmt: str, pretty: bool) -> str:
     return to_txt(part)
 
 
+def _name_exists(out_dir: Path, base: str) -> bool:
+    """True if any output file already starts with this base name."""
+    return any(out_dir.glob(f"{base}.*")) or any(out_dir.glob(f"{base}_*"))
+
+
+def _unique_base(out_dir: Path, tz) -> str:
+    """A digest base name that will not overwrite an existing file.
+
+    Minute resolution first; then seconds; then a numeric suffix.
+    """
+    base = f"digest_{datetime.now(tz).strftime('%Y-%m-%d_%H%M')}"
+    if not _name_exists(out_dir, base):
+        return base
+    base = f"digest_{datetime.now(tz).strftime('%Y-%m-%d_%H%M%S')}"
+    if not _name_exists(out_dir, base):
+        return base
+    counter = 2
+    while _name_exists(out_dir, f"{base}_{counter}"):
+        counter += 1
+    return f"{base}_{counter}"
+
+
 def write_outputs(
     args: argparse.Namespace,
     ai_instructions: str,
@@ -121,11 +143,14 @@ def write_outputs(
     channels: list[dict[str, Any]],
     tz,
 ) -> list[tuple[Path, str]]:
-    """Write the digest (single file, parts, or one file per channel)."""
+    """Write the digest (single file, parts, or one file per channel).
+
+    An existing file is never overwritten: the name falls back to seconds, then
+    to a numeric suffix.
+    """
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(tz).strftime("%Y-%m-%d_%H%M")
-    base = f"digest_{stamp}"
+    base = _unique_base(out_dir, tz)
     ext = args.format
     written: list[tuple[Path, str]] = []
 
@@ -203,9 +228,39 @@ async def run(args: argparse.Namespace) -> int:
 
     ai_instructions = DEFAULT_AI_INSTRUCTIONS
     if args.summary_prompt_file:
-        ai_instructions = Path(args.summary_prompt_file).read_text(encoding="utf-8").strip()
+        try:
+            prompt_text = Path(args.summary_prompt_file).read_text(encoding="utf-8").strip()
+        except OSError as exc:
+            print(f"Error: cannot read --summary-prompt-file {args.summary_prompt_file}: {exc.strerror or exc}")
+            return 2
+        if prompt_text:
+            ai_instructions = prompt_text
+        else:
+            print("Warning: --summary-prompt-file is empty; using the default ai_instructions.")
+
+    # Validate the output directory up front (before any network work).
+    out_dir = Path(args.output_dir)
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        probe = out_dir / ".write_probe"
+        probe.write_text("", encoding="utf-8")
+        probe.unlink()
+    except OSError as exc:
+        print(f"Error: output directory is not writable: {out_dir} ({exc.strerror or exc})")
+        return 2
 
     last_run = state_mod.get_last_run(STATE_PATH)
+    if args.since_last_run:
+        now_utc = datetime.now(timezone.utc)
+        problem = None
+        if last_run is None:
+            problem = "no previous successful run was recorded"
+        elif last_run > now_utc:
+            problem = "the recorded timestamp is in the future"
+        if problem:
+            print(f"Warning: --since-last-run cannot be used ({problem}); falling back to --last 24h.")
+            args.since_last_run = False
+            args.last = "24h"
     window = resolve_window(
         today=args.today,
         yesterday=args.yesterday,
@@ -248,6 +303,20 @@ async def run(args: argparse.Namespace) -> int:
                 skipped.append({"channel": spec.label or spec.value, "reason": resolved.reason})
                 log.info("skip %s: %s", spec.raw, resolved.reason)
 
+        # De-duplicate by the resolved numeric chat id (the same channel listed
+        # twice, e.g. as a link and as @username). Keep the first occurrence.
+        seen_ids: set[int] = set()
+        unique_resolved = []
+        for resolved in resolved_list:
+            entity_id = getattr(resolved.entity, "id", None) if resolved.ok else None
+            if entity_id is not None and entity_id in seen_ids:
+                log.info("duplicate channel %s (id %s) already listed; skipping", resolved.spec.raw, entity_id)
+                continue
+            if entity_id is not None:
+                seen_ids.add(entity_id)
+            unique_resolved.append(resolved)
+        resolved_list = unique_resolved
+
         opts = ScrapeOptions(
             tz=tz,
             max_per_channel=args.max_per_channel,
@@ -277,18 +346,24 @@ async def run(args: argparse.Namespace) -> int:
         done = checkpoint.load_done() if args.resume else {}
 
         results: list[dict[str, Any]] = []
+        truncated_channels: list[str] = []
         for resolved in ok_list:
             key = resolved.spec.raw
             if key in done:
                 results.append(done[key])
+                if done[key].get("truncated"):
+                    truncated_channels.append(done[key].get("name", resolved.name))
                 log.info("resume: %s already collected", resolved.name)
                 continue
 
             bar = tqdm(desc=f"{resolved.name[:28]:<28}", unit="msg", leave=False)
+            truncated = False
             try:
-                messages, reason = await scrape_channel(
-                    client, resolved, window, opts, lambda n=1: bar.update(n)
+                messages, reason, truncated = await scrape_channel(
+                    client, resolved, window, opts, partial(bar.update)
                 )
+            except Exception as exc:  # noqa: BLE001 - belt-and-braces; one channel must not kill the run
+                messages, reason, truncated = None, f"unexpected_error:{type(exc).__name__}", False
             finally:
                 bar.close()
 
@@ -302,14 +377,18 @@ async def run(args: argparse.Namespace) -> int:
                     "username": resolved.username,
                     "type": resolved.kind,
                     "link_base": resolved.link_base,
-                    "count": len(messages),
-                    "messages": messages,
+                    "count": len(messages or []),
+                    "messages": messages or [],
                 }
+                if truncated:
+                    channel["truncated"] = True
+                    channel["cap"] = opts.max_per_channel
+                    truncated_channels.append(resolved.name)
                 results.append(channel)
                 checkpoint.append_channel(key, channel)
-                log.info("done %s: %d message(s)", resolved.name, len(messages))
+                log.info("done %s: %d message(s)", resolved.name, len(messages or []))
 
-            await asyncio.sleep(random.uniform(CHANNEL_WAIT_MIN_SECONDS, CHANNEL_WAIT_MAX_SECONDS))
+            await asyncio.sleep(random.uniform(CHANNEL_WAIT_MIN_SECONDS, CHANNEL_WAIT_MAX_SECONDS))  # nosec B311 - channel jitter
 
         messages_total = sum(channel["count"] for channel in results)
         now_utc = datetime.now(timezone.utc)
@@ -324,6 +403,8 @@ async def run(args: argparse.Namespace) -> int:
         }
         if skipped:
             meta["skipped"] = skipped
+        if truncated_channels:
+            meta["truncated_channels"] = truncated_channels
 
         written = write_outputs(args, ai_instructions, meta, results, tz)
         combined_text = "\n".join(text for _, text in written)
@@ -357,7 +438,7 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\nInterrupted. Re-run with --resume to continue.", file=sys.stderr)
         sys.exit(130)
-    except (RuntimeError, ValueError) as exc:
+    except (RuntimeError, ValueError, OSError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(2)
     sys.exit(exit_code)
