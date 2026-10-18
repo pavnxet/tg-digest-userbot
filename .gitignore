@@ -1,0 +1,19 @@
+# Secrets and session
+.env
+*.session
+*.session-journal
+
+# Runtime artefacts
+output/
+.cache/
+logs/
+state.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+env/

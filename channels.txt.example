@@ -1,0 +1,17 @@
+# channels.txt -- one entry per line.
+# Lines starting with '#' and blank lines are ignored.
+# An optional "| custom label" suffix overrides the display name.
+
+# Public channel by username (with or without the https://t.me/ prefix)
+@durov
+https://t.me/telegram
+
+# Public channel with a custom label
+@examplechannel | My Favourite Channel
+
+# Private invite link (only joined when --auto-join is passed)
+https://t.me/+AbCdEfGhIjK
+https://t.me/joinchat/AbCdEfGhIjK
+
+# Numeric chat id (e.g. a supergroup / channel you are already in)
+-1001234567890
