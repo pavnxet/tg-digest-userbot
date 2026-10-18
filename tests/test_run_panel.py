@@ -1,0 +1,128 @@
+"""Section C: /run /stop /preview /last via a fake main.py subprocess."""
+import asyncio
+import json
+
+from fake_bot_client import FakeEvent, build_app
+
+OWNER = 555
+
+
+def _texts(bot):
+    return [text for _chat, text, _buttons, _message in bot.sent]
+
+
+def _make_script(tmp_path, body: str):
+    script = tmp_path / "fake_main.py"
+    script.write_text(body, encoding="utf-8")
+    return script
+
+
+def _success_script(tmp_path, outdir):
+    return _make_script(tmp_path, (
+        "import pathlib, json\n"
+        f"p = pathlib.Path(r'{outdir}')\n"
+        "p.mkdir(exist_ok=True)\n"
+        "(p / 'digest_2026-10-18_1200.json').write_text(json.dumps("
+        "{'meta': {'channels_ok': 2, 'messages_total': 5, 'skipped': []}}))\n"
+    ))
+
+
+def _sleep_script(tmp_path):
+    return _make_script(tmp_path, "import time\ntime.sleep(30)\n")
+
+
+def _preview_script(tmp_path):
+    return _make_script(tmp_path, "print('  OK    News  (~12 message(s) in window)')\nprint('  OK    Jobs  (~3 message(s) in window)')\n")
+
+
+def _app(tmp_path, script, channels="@a\n@b\n"):
+    outdir = tmp_path / "output"
+    cachedir = tmp_path / "cache"
+    return build_app(tmp_path, channels_text=channels, run_script=script,
+                     output_dir=outdir, cache_dir=cachedir)
+
+
+def test_run_success_sends_digest(tmp_path):
+    outdir = tmp_path / "output"
+    script = _success_script(tmp_path, outdir)
+    app, bot, user, owners, session = _app(tmp_path, script)
+
+    async def scenario():
+        await app.handle(FakeEvent(bot, "/run today", OWNER))
+        await app._run_panel._task
+
+    asyncio.run(scenario())
+    assert any("Run ok" in t for t in _texts(bot))
+    assert bot.files                                  # digest sent as a document
+    assert user.connected is False                    # user client disconnected before spawn
+
+
+def test_run_stop_kills(tmp_path):
+    script = _sleep_script(tmp_path)
+    app, bot, user, owners, session = _app(tmp_path, script)
+
+    async def scenario():
+        await app.handle(FakeEvent(bot, "/run today", OWNER))
+        await asyncio.sleep(0.3)
+        await app.handle(FakeEvent(bot, "/stop", OWNER))
+        await app._run_panel._task
+
+    asyncio.run(scenario())
+    assert any("रोक दिया" in t for t in _texts(bot))
+
+
+def test_run_refused_while_running(tmp_path):
+    script = _sleep_script(tmp_path)
+    app, bot, user, owners, session = _app(tmp_path, script)
+
+    async def scenario():
+        await app.handle(FakeEvent(bot, "/run today", OWNER))
+        await asyncio.sleep(0.2)
+        await app.handle(FakeEvent(bot, "/run today", OWNER))
+        await app.handle(FakeEvent(bot, "/stop", OWNER))
+        await app._run_panel._task
+
+    asyncio.run(scenario())
+    assert any("पहले से चल रहा" in t for t in _texts(bot))
+
+
+def test_run_rejects_bad_arguments(tmp_path):
+    script = _success_script(tmp_path, tmp_path / "output")
+    app, bot, user, owners, session = _app(tmp_path, script)
+    asyncio.run(app.handle(FakeEvent(bot, "/run nonsense", OWNER)))
+    assert any("❌" in t for t in _texts(bot))
+    asyncio.run(app.handle(FakeEvent(bot, "/run today --auto-join", OWNER)))
+    assert any("अज्ञात option" in t for t in _texts(bot))
+
+
+def test_preview_shows_counts(tmp_path):
+    script = _preview_script(tmp_path)
+    app, bot, user, owners, session = _app(tmp_path, script)
+    asyncio.run(app.handle(FakeEvent(bot, "/preview today", OWNER)))
+    text = _texts(bot)[-1]
+    assert "News: ~12" in text and "Jobs: ~3" in text
+
+
+def test_last_resends(tmp_path):
+    outdir = tmp_path / "output"
+    script = _success_script(tmp_path, outdir)
+    app, bot, user, owners, session = _app(tmp_path, script)
+
+    async def scenario():
+        await app.handle(FakeEvent(bot, "/run today", OWNER))
+        await app._run_panel._task
+
+    asyncio.run(scenario())
+    before = len(bot.files)
+    asyncio.run(app.handle(FakeEvent(bot, "/last", OWNER)))
+    assert len(bot.files) > before
+
+
+def test_run_commands_are_owner_guarded(tmp_path):
+    script = _success_script(tmp_path, tmp_path / "output")
+    app, bot, user, owners, session = _app(tmp_path, script)
+    for command in ["/run today", "/stop", "/preview today", "/last"]:
+        event = FakeEvent(bot, command, 999)
+        asyncio.run(app.handle(event))
+        assert event.replies == []
+    assert bot.sent == []

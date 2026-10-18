@@ -15,7 +15,9 @@ import contextlib
 import io
 import logging
 import re
+import secrets
 import time
+from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from telethon.errors import (
@@ -40,6 +42,17 @@ from user_session import SessionLockedError
 _log = logging.getLogger("tgdigest.bot")
 
 QR_MAX_SENDS = QR_MAX_REFRESHES + 1      # initial QR + up to 3 refreshes
+
+
+@dataclass
+class Pending:
+    """A confirmation awaiting a button press (expires after 60s)."""
+
+    action: str
+    payload: dict = field(default_factory=dict)
+    expires_at: float = 0.0
+
+
 SEND_CODE_PER_HOUR = 3
 _NON_DIGITS = re.compile(r"[^0-9]")
 _NON_PHONE = re.compile(r"[^0-9+]")
@@ -76,13 +89,23 @@ class BotApp:
         owner_store: Any,
         manager: Optional[LoginManager] = None,
         log: Optional[logging.Logger] = None,
+        channels_store: Any = None,
+        run_manager: Any = None,
+        settings: Any = None,
+        output_dir: Any = None,
+        cache_dir: Any = None,
+        schedule_store: Any = None,
     ) -> None:
         self.bot = bot
         self.user = user_session
         self.owners = owner_store
         self.manager = manager or LoginManager()
         self.log = log or _log
+        self.channels_store = channels_store
         self._code_times: list[float] = []
+        self._pending: dict[str, Pending] = {}
+        self._confirm_actions: dict[str, Any] = {}
+        self._extra_callbacks: dict[bytes, Any] = {}
         # The single command registry. Handlers are reachable only through the
         # guarded dispatcher below, so adding one here is automatically guarded.
         self.commands = {
@@ -94,6 +117,32 @@ class BotApp:
             "/logout": self.cmd_logout,
             "/cancel": self.cmd_cancel,
         }
+        if channels_store is not None:
+            from bot_channels import ChannelPanel
+
+            self._channel_panel = ChannelPanel(self)
+        if run_manager is not None and settings is not None:
+            from bot_run import RunPanel
+
+            self._run_panel = RunPanel(self, run_manager, settings, output_dir, cache_dir)
+        if settings is not None:
+            from bot_settings import SettingsPanel
+
+            self._settings_panel = SettingsPanel(self, settings)
+        if schedule_store is not None:
+            from bot_schedule import SchedulePanel, Scheduler
+
+            self._schedule_panel = SchedulePanel(self, schedule_store)
+            if run_manager is not None:
+                self._scheduler = Scheduler(self, schedule_store, self._run_panel)
+        if output_dir is not None and settings is not None:
+            from bot_files import FilePanel
+
+            self._file_panel = FilePanel(self, output_dir, settings)
+        if run_manager is not None:
+            from bot_health import HealthPanel
+
+            self._health_panel = HealthPanel(self, run_manager, output_dir, cache_dir, schedule_store)
 
     # ------------------------------------------------------------------ guard
     async def handle(self, event: Any) -> None:
@@ -139,6 +188,47 @@ class BotApp:
             await self._do_logout(event)
         elif data == b"logout_no":
             await self._respond(event, "रद्द किया गया। / Cancelled.")
+        elif data.startswith(b"confirm:") or data.startswith(b"cancel:"):
+            await self._handle_confirmation(event, data)
+        else:
+            handler = self._extra_callbacks.get(data)
+            if handler is not None:
+                await handler(event)
+
+    # -- generic confirmations (destructive actions) -----------------------
+    def register_confirmation(self, action: str, handler: Any) -> None:
+        self._confirm_actions[action] = handler
+
+    def register_callback(self, data: bytes, handler: Any) -> None:
+        self._extra_callbacks[data] = handler
+
+    async def ask_confirmation(self, event: Any, text: str, action: str,
+                               payload: Optional[dict] = None,
+                               confirm_label: str = "हाँ / Yes",
+                               cancel_label: str = "रद्द / Cancel") -> None:
+        token = secrets.token_urlsafe(8)
+        self._pending[token] = Pending(action=action, payload=payload or {}, expires_at=time.time() + 60)
+        buttons = [[Button.inline(confirm_label, f"confirm:{token}".encode()),
+                    Button.inline(cancel_label, f"cancel:{token}".encode())]]
+        await self._respond(event, text, buttons=buttons)
+
+    async def _handle_confirmation(self, event: Any, data: bytes) -> None:
+        kind, _, token = data.decode("utf-8").partition(":")
+        pending = self._pending.pop(token, None)
+        if pending is None:
+            await self._respond(event, "यह confirmation पहले ही इस्तेमाल हो चुका है।")
+            return
+        if time.time() > pending.expires_at:
+            await self._respond(event, "confirmation expire हो गया (60s)। फिर से भेजें।")
+            return
+        if kind == "cancel":
+            await self._respond(event, "रद्द किया गया। / Cancelled.")
+            return
+        handler = self._confirm_actions.get(pending.action)
+        if handler is None:
+            await self._respond(event, "यह action उपलब्ध नहीं है।")
+            return
+        await handler(event, pending.payload)
 
     # --------------------------------------------------------------- pairing
     async def _handle_claim(self, event: Any, text: str) -> None:

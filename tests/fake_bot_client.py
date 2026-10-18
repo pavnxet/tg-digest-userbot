@@ -7,6 +7,7 @@ on top of the AST safety scan).
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Optional
 
@@ -46,6 +47,7 @@ class FakeBotClient:
     def __init__(self) -> None:
         self.sent: list[tuple] = []        # (chat_id, text, buttons, message)
         self.files: list[tuple] = []       # (chat_id, bytes, caption, message)
+        self.edits: list[tuple] = []       # (chat_id, message_id, text)
         self.deleted: list[tuple] = []     # (chat_id, ids)
         self.calls: list[tuple] = []
         self.delete_should_fail = False
@@ -68,6 +70,13 @@ class FakeBotClient:
         message = FakeMessage()
         self.files.append((chat_id, data, caption, message))
         return message
+
+    async def edit_message(self, chat_id, message_id, text, **kwargs):
+        self.calls.append(("edit_message", chat_id))
+        if self.send_should_fail:
+            raise RuntimeError("edit failed")
+        self.edits.append((chat_id, message_id, text))
+        return True
 
     async def delete_messages(self, chat_id, ids):
         self.calls.append(("delete_messages", chat_id))
@@ -142,6 +151,9 @@ class FakeUserClient:
         self.connect_error: Optional[Exception] = None
         self.calls: list[tuple] = []
         self.connected = False
+        self.entities: dict = {}
+        self.invite_result = None
+        self.invite_error: Optional[Exception] = None
 
     async def connect(self):
         self.calls.append(("connect",))
@@ -160,6 +172,21 @@ class FakeUserClient:
     async def get_me(self):
         self.calls.append(("get_me",))
         return self.me_obj
+
+    async def get_entity(self, key):
+        self.calls.append(("get_entity", key))
+        if key in self.entities:
+            return self.entities[key]
+        raise ValueError(f"cannot find entity {key!r}")
+
+    async def __call__(self, request):
+        name = type(request).__name__
+        self.calls.append(("request", name))
+        if name == "CheckChatInviteRequest":
+            if self.invite_error is not None:
+                raise self.invite_error
+            return self.invite_result
+        raise NotImplementedError(name)
 
     async def qr_login(self):
         self.calls.append(("qr_login",))
@@ -260,13 +287,17 @@ class FakeCallbackEvent:
         return await self.bot.send_message(self.chat_id, text, buttons=buttons)
 
 
-def build_app(tmp_path, *, owner_id: int = 555, needs_pairing: bool = False, log: Any = None):
+def build_app(tmp_path, *, owner_id: int = 555, needs_pairing: bool = False, log: Any = None,
+              channels_text: Optional[str] = None, run_script=None,
+              output_dir=None, cache_dir=None, min_interval: int = 0):
     """Wire a BotApp with fakes. Returns (app, bot, user_client, owners, session).
 
     `app.user` is a REAL UserSession wrapping the fake user client, so the
-    session-file and locked-session logic are exercised too.
+    session-file and locked-session logic are exercised too. Pass
+    `channels_text` to also attach a real ChannelStore (as `app.channels_store`).
     """
     from bot_handlers import BotApp
+    from channel_store import ChannelStore
     from config import Credentials
     from owner import OwnerStore
     from user_session import UserSession
@@ -276,5 +307,35 @@ def build_app(tmp_path, *, owner_id: int = 555, needs_pairing: bool = False, log
     fake_user = FakeUserClient()
     credentials = Credentials(api_id=1, api_hash="hash", phone="")
     session = UserSession(credentials, str(tmp_path / "tg_digest"), client_factory=lambda c, b: fake_user)
-    app = BotApp(bot, session, owners, log=log)
+    store = None
+    if channels_text is not None:
+        (tmp_path / "channels.txt").write_text(channels_text, encoding="utf-8")
+        store = ChannelStore(tmp_path / "channels.txt", tmp_path / "channels.lock")
+    run_manager = None
+    settings = None
+    schedule_store = None
+    if run_script is not None:
+        import sys
+
+        from run_manager import RunManager
+        from settings_store import SettingsStore
+
+        output_dir = output_dir or (tmp_path / "output")
+        cache_dir = cache_dir or (tmp_path / "cache")
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        Path(cache_dir).mkdir(parents=True, exist_ok=True)
+        settings = SettingsStore(tmp_path / "settings.json")
+        run_manager = RunManager(
+            main_path=run_script, lock_path=Path(cache_dir) / "run.lock",
+            history_path=Path(cache_dir) / "history.json", python=sys.executable,
+            timeout=30, min_interval=min_interval, max_per_day=100,
+            ensure_disconnected=session.disconnect,
+        )
+        from schedule_store import ScheduleStore
+
+        schedule_store = ScheduleStore(tmp_path / "schedule.json")
+    app = BotApp(bot, session, owners, log=log, channels_store=store,
+                 run_manager=run_manager, settings=settings,
+                 output_dir=output_dir, cache_dir=cache_dir,
+                 schedule_store=schedule_store)
     return app, bot, fake_user, owners, session

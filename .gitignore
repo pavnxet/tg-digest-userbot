@@ -10,6 +10,13 @@ output/
 logs/
 state.json
 
+# Control-panel state (personal)
+channels.txt
+channels.txt.bak
+channels.txt.tmp
+settings.json
+schedule.json
+
 # Python
 __pycache__/
 *.py[cod]

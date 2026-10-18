@@ -159,6 +159,89 @@ terminal.
 
 ---
 
+## 3c. Full command reference
+
+Everything below is owner-only, private-chat only. Non-owner messages get no reply.
+
+### Account
+| Command | What it does |
+|---|---|
+| `/start`, `/help` | Short usage |
+| `/login` | QR login (default). Refresh up to 3 times, ~2-3 min. |
+| `/login_phone` | Phone + code fallback (Telegram may reject a chat-typed code). |
+| `/status` | Logged in? First name + last 2 phone digits only. |
+| `/logout` | Confirms, then logs out and deletes the local session file. |
+| `/cancel` | Aborts an in-progress login and clears state. |
+
+### Channels
+| Command | What it does |
+|---|---|
+| `/channels [tag]` | List channels (20 per page), with paused/invalid marks. |
+| `/add <link\|@name\|id> [\| label]` | Validate (read-only) and append. Shows title + membership. |
+| `/remove <#\|link\|name>` | Remove, after confirmation. Ambiguous matches ask which. |
+| `/pause <#>` / `/resume <#>` | Mark a line `off` / remove the mark. |
+| `/tag <#> <tag>` / `/untag <#> <tag>` | Add / remove a tag. |
+| `/groups` | List tag groups with counts. |
+
+`channels.txt` line syntax (old lines keep working):
+
+```
+# comment — ignored
+@news | Daily News | tags=news,jobs | off
+https://t.me/somechannel | Some Channel
+-1001234567890
+```
+
+Segments after the entry: anything is a label, `tags=a,b` sets tags, `off` pauses
+the line (the scraper skips it and reports it as `paused`).
+
+### Running
+| Command | What it does |
+|---|---|
+| `/run <window> [group:<tag>] [channel:<n>] [dedupe] [min:<N>] [views] [send:no]` | Run the scraper. Window: `today`, `yesterday`, `6h`, `24h`, `3d`, `since-last`, or `YYYY-MM-DD HH:MM YYYY-MM-DD HH:MM` (IST). |
+| `/stop` | Kill the whole run process tree. |
+| `/preview <window> [group:<tag>]` | Dry-run; shows message counts per channel. No file. |
+| `/last` | Resend the most recent digest. |
+
+Limits (to protect the account): one run at a time, minimum 5 minutes between
+runs, maximum 12 runs per day (manual and scheduled share these), 30-minute hard
+timeout. Files are sent as documents; more than 10 parts asks first.
+
+### Schedules (IST, max 5)
+`/schedule add <HH:MM> <window> [group:<tag>]`, `/schedule list`,
+`/schedule remove <n>` (confirms), `/schedule pause <n>`, `/schedule resume <n>`.
+A run missed while the bot was down is **not** caught up; the bot offers a
+"Run now" button instead. If a run is already going, a scheduled run is skipped.
+
+### Settings
+`/settings` shows all values; `/set <key> <value>` changes one.
+Keys: `format` (json|jsonl|txt), `dedupe` (on|off), `min_chars` (0-500),
+`with_views` (on|off), `max_chars` (50000-1000000), `autodelete_minutes`
+(0-1440), `retention_days` (1-60), `max_per_channel` (100-20000).
+
+### Files and search
+`/files` lists recent outputs with buttons to resend. `/clean` deletes outputs
+older than `retention_days` (after confirmation). `/find <keyword> [6h|24h|3d]`
+searches saved digests locally (no Telegram call), Unicode-normalised, up to 10
+matches with a link.
+
+### Health and kill switch
+`/health` shows login state, last run, skipped channels, next schedule, disk
+space, versions and uptime — no secrets. `/panic` (double confirmation) pauses
+schedules, stops any run, logs out and deletes the session, deletes outputs and
+`.cache` — but **keeps** `.cache/run_history.json` and `.cache/run.lock` (so the
+daily and gap limits survive), and keeps `channels.txt` and `settings.json`.
+
+### Keeping the bot running
+The bot must be running for schedules and commands to work:
+`python bot.py` (or run it under `systemd`/`tmux`/`screen`). **A laptop that
+sleeps or closes will stop it**, and Termux on Android may be killed by the OS
+when the screen is off — so a missed schedule is normal there; the bot tells you
+and offers "Run now". Digest files sent to the chat are stored on Telegram's
+servers (see `docs/SECURITY.md`).
+
+---
+
 ## 4. Choose your channels
 
 ```bash

@@ -312,6 +312,10 @@ async def run(args: argparse.Namespace) -> int:
         print(f"Resolving {len(specs)} channel(s)...")
         resolved_list = []
         for spec in specs:
+            if spec.paused:
+                skipped.append({"channel": spec.label or spec.value, "reason": "paused"})
+                log.info("skip %s: paused", spec.raw)
+                continue
             resolved = await resolve_spec(client, spec, join_state)
             resolved_list.append(resolved)
             if not resolved.ok:

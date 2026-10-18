@@ -14,6 +14,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Callable
 
+from telethon.tl.functions.messages import CheckChatInviteRequest
+
 from client import build_client
 from config import Credentials
 
@@ -26,11 +28,15 @@ USER_CLIENT_METHODS = frozenset({
     "disconnect",
     "is_user_authorized",
     "get_me",
+    "get_entity",
     "qr_login",
     "send_code_request",
     "sign_in",
     "log_out",
 })
+
+# Request classes the wrapper may pass to the user client (all read-only).
+USER_CLIENT_REQUESTS = frozenset({"CheckChatInviteRequest"})
 
 
 class SessionLockedError(RuntimeError):
@@ -87,6 +93,13 @@ class UserSession:
 
     async def me(self) -> Any:
         return await self._client.get_me()
+
+    async def get_entity(self, key: Any) -> Any:
+        return await self._client.get_entity(key)
+
+    async def check_invite(self, invite_hash: str) -> Any:
+        """Read-only: check an invite link without ever importing/joining it."""
+        return await self._client(CheckChatInviteRequest(invite_hash))
 
     async def qr_login(self) -> Any:
         return await self._client.qr_login()

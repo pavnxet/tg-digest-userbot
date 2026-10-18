@@ -50,30 +50,50 @@ class ChannelSpec:
     kind: str  # "username" | "invite" | "id" | "invalid"
     value: str
     label: Optional[str] = None
+    tags: tuple[str, ...] = ()
+    paused: bool = False
 
 
 def parse_channel_line(line: str) -> Optional[ChannelSpec]:
     """Parse a single line. Returns None for comments and blank lines.
 
-    Accepts: ``@name``, ``https://t.me/name``, scheme-less ``t.me/name``,
-    optional query/fragment, a trailing ``/``, a post link ``name/123``, a
-    private post link ``c/<id>/<msg>``, private invites (``+hash`` /
-    ``joinchat/hash``) and numeric ids. Unparseable non-empty lines become an
-    ``invalid`` spec (reported later as ``invalid_entry``), never silently
-    dropped.
+    Syntax (backward compatible)::
+
+        <entry> [| label] [| tags=a,b] [| off]
+
+    A segment that is exactly ``off`` marks the line paused; a segment
+    ``tags=...`` sets tags; anything else is part of the label. Old lines
+    (``entry | label``) keep working unchanged.
     """
     raw = line.strip().lstrip("\ufeff").strip()
     if not raw or raw.startswith("#"):
         return None
 
-    label: Optional[str] = None
-    body = raw
-    if "|" in body:
-        body, label = body.split("|", 1)
-        body = body.strip()
-        label = label.strip() or None
+    segments = raw.split("|")
+    body = segments[0].strip()
+    label_parts: list[str] = []
+    tags: list[str] = []
+    paused = False
+    for segment in segments[1:]:
+        piece = segment.strip()
+        if not piece:
+            continue
+        low = piece.lower()
+        if low == "off":
+            paused = True
+        elif low.startswith("tags="):
+            for tag in piece[5:].split(","):
+                tag = tag.strip()
+                if tag and tag not in tags:
+                    tags.append(tag)
+        else:
+            label_parts.append(piece)
+    label = "|".join(label_parts) if label_parts else None
     if not body:
         return None
+
+    def spec(kind: str, value: str) -> ChannelSpec:
+        return ChannelSpec(raw, kind, value, label, tuple(tags), paused)
 
     # Normalise a URL to a bare target: drop scheme, host, query and fragment.
     target = _SCHEME_RE.sub("", body)
@@ -83,33 +103,31 @@ def parse_channel_line(line: str) -> Optional[ChannelSpec]:
         target = target[1:]
     if not target:
         # Non-empty line that yields no target (e.g. "https://t.me/" or "???").
-        return ChannelSpec(raw, "invalid", body, label)
+        return spec("invalid", body)
 
     # Private invite links.
     if target.startswith("+"):
         hash_ = target[1:]
-        return ChannelSpec(raw, "invite", hash_, label) if _INVITE_HASH_RE.match(hash_) \
-            else ChannelSpec(raw, "invalid", target, label)
+        return spec("invite", hash_) if _INVITE_HASH_RE.match(hash_) else spec("invalid", target)
     if target.lower().startswith("joinchat/"):
         hash_ = target.split("/", 1)[1]
-        return ChannelSpec(raw, "invite", hash_, label) if _INVITE_HASH_RE.match(hash_) \
-            else ChannelSpec(raw, "invalid", target, label)
+        return spec("invite", hash_) if _INVITE_HASH_RE.match(hash_) else spec("invalid", target)
 
     # Private post link c/<id>/<msg> -> the channel id (-100<id>).
     private = _PRIVATE_POST_RE.match(target)
     if private:
-        return ChannelSpec(raw, "id", f"-100{private.group(1)}", label)
+        return spec("id", f"-100{private.group(1)}")
 
     # Numeric id (checked before username, since digits also match it).
     if _NUMERIC_RE.match(target):
-        return ChannelSpec(raw, "id", target, label)
+        return spec("id", target)
 
     # Public username, optionally with a /<post id> suffix.
     username = target.split("/", 1)[0]
     if _USERNAME_RE.match(username):
-        return ChannelSpec(raw, "username", username, label)
+        return spec("username", username)
 
-    return ChannelSpec(raw, "invalid", target, label)
+    return spec("invalid", target)
 
 
 def parse_channels_file(path: Path) -> list[ChannelSpec]:

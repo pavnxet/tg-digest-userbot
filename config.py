@@ -31,6 +31,15 @@ OWNER_FILE: Path = ROOT_DIR / "owner.json"
 BOT_LOG: Path = LOG_DIR / "bot.log"
 PAIRING_CODE_BYTES: int = 4  # -> 8 hex characters, printed to the terminal only
 
+# Control-plane run limits (section A). All overridable from the environment later.
+RUN_TIMEOUT_SECONDS: int = 1800        # hard timeout for one scrape (30 min)
+RUN_MIN_INTERVAL_SECONDS: int = 300    # minimum gap between two runs (5 min)
+RUN_MAX_PER_DAY: int = 12              # maximum runs per IST day (manual + scheduled)
+RUN_LOCK_PATH: Path = CACHE_DIR / "run.lock"
+RUN_HISTORY_PATH: Path = CACHE_DIR / "run_history.json"
+SETTINGS_PATH: Path = ROOT_DIR / "settings.json"
+SCHEDULE_PATH: Path = ROOT_DIR / "schedule.json"
+
 # --------------------------------------------------------------------------
 # Defaults (all overridable from the command line)
 # --------------------------------------------------------------------------
