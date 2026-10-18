@@ -22,10 +22,14 @@ async def login(client: TelegramClient, phone: str = "") -> None:
 
     Telethon's `start()` handles the interactive prompts in the terminal and
     persists the session so later runs skip login entirely. If `phone` is empty
-    (e.g. you only logged in with a QR code and never set PHONE in .env),
-    Telethon prompts for the number in the terminal instead.
+    (e.g. a QR-login setup with no PHONE in .env) the argument is omitted so
+    Telethon prompts for the number -- passing ``phone=None`` explicitly would
+    raise ``ValueError: No phone number or bot token provided``.
     """
-    await client.start(phone=phone or None)
+    if phone:
+        await client.start(phone=phone)
+    else:
+        await client.start()
 
 
 def session_file_exists(session_basename: str) -> bool:

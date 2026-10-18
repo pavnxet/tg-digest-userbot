@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import json
 import random
 import re
@@ -290,20 +291,28 @@ async def run(args: argparse.Namespace) -> int:
 
     credentials = load_credentials()
     client = build_client(credentials, SESSION_BASENAME)
-    if not args.terminal_login:
+
+    if args.terminal_login:
+        # Interactive login in the terminal (prompts for phone / OTP / 2FA).
+        await login(client, credentials.phone)
+    else:
+        # No terminal prompts by default: rely on an existing session. Never
+        # call login()/start() here -- Telethon's start() would raise
+        # "No phone number or bot token provided" even for an authorized
+        # session, and a QR-login .env has no PHONE.
         authorized = False
         try:
             await client.connect()
             authorized = await client.is_user_authorized()
         except Exception:  # noqa: BLE001 - any failure means "assume not logged in"
             authorized = False
-        finally:
-            await client.disconnect()
         if not authorized:
+            with contextlib.suppress(Exception):
+                await client.disconnect()
             print("Not logged in. Start `python bot.py` and send /login to the bot, "
                   "or run with --terminal-login.")
             return 2
-    await login(client, credentials.phone)
+        # The client stays connected for the scrape; the finally below disconnects it.
 
     try:
         join_state = JoinState(auto_join=args.auto_join, max_joins=args.max_joins)

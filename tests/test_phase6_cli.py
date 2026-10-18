@@ -8,7 +8,7 @@ import pytest
 import config
 import main
 from conftest import run_main
-from fake_client import make_channel, make_message
+from fake_client import FakeTelegramClient, make_channel, make_message
 from timeutil import get_tz
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -76,14 +76,65 @@ def test_login_without_phone_lets_telethon_prompt():
 
     class FakeClient:
         def __init__(self):
-            self.phone = "unset"
+            self.phone_kwarg = "unset"
 
-        async def start(self, phone=None):
-            self.phone = phone
+        async def start(self, **kwargs):
+            self.phone_kwarg = kwargs.get("phone", "<omitted>")
 
     fake = FakeClient()
     asyncio.run(login(fake, ""))
-    assert fake.phone is None          # -> Telethon prompts in the terminal
+    assert fake.phone_kwarg == "<omitted>"          # no phone kwarg -> Telethon prompts
+    asyncio.run(login(fake, "+911234567890"))
+    assert fake.phone_kwarg == "+911234567890"
+
+
+class _NoStartFake(FakeTelegramClient):
+    """Mimics Telethon: start() must never be called for an authorized session."""
+
+    def __init__(self):
+        super().__init__()
+        self.auth = True
+
+    async def is_user_authorized(self):
+        return self.auth
+
+    async def start(self, *args, **kwargs):
+        raise AssertionError("start() must not be called for an already-authorized session")
+
+
+def test_authorized_session_never_calls_start(monkeypatch, project):
+    # Regression: with a QR-login .env (no PHONE) and an authorized session,
+    # main.run() must not call login()/start(), which would raise
+    # "No phone number or bot token provided".
+    import asyncio
+    from types import SimpleNamespace
+
+    import main
+
+    client = _NoStartFake()
+    channel = make_channel(1234567890, "News", username="news")
+    client.add_channel(channel, [_now_message(1, "hello")])
+    monkeypatch.setattr(main, "build_client", lambda creds, session: client)
+    monkeypatch.setattr(main, "load_credentials", lambda: SimpleNamespace(api_id=1, api_hash="h", phone=""))
+    project["channels"].write_text("@news\n", encoding="utf-8")
+    args = main.build_parser().parse_args(["--last", "1h"])
+    assert asyncio.run(main.run(args)) == 0
+
+
+def test_not_logged_in_returns_2_and_never_calls_start(monkeypatch, project, capsys):
+    import asyncio
+    from types import SimpleNamespace
+
+    import main
+
+    client = _NoStartFake()
+    client.auth = False
+    monkeypatch.setattr(main, "build_client", lambda creds, session: client)
+    monkeypatch.setattr(main, "load_credentials", lambda: SimpleNamespace(api_id=1, api_hash="h", phone=""))
+    project["channels"].write_text("@news\n", encoding="utf-8")
+    args = main.build_parser().parse_args(["--last", "1h"])
+    assert asyncio.run(main.run(args)) == 2
+    assert "Not logged in" in capsys.readouterr().out
 
 
 def test_non_integer_api_id_errors(tmp_path):
