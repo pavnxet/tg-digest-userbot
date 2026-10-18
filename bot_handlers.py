@@ -59,13 +59,64 @@ _NON_PHONE = re.compile(r"[^0-9+]")
 _PHONE_RE = re.compile(r"^\+?[1-9]\d{6,14}$")
 
 HELP_TEXT = (
-    "/start, /help — मदद / help\n"
-    "/login — QR से लॉगिन (दूसरे device से scan)\n"
-    "/login_phone — फ़ोन + कोड से लॉगिन\n"
-    "/status — लॉगिन स्थिति / login status\n"
-    "/logout — लॉगआउट / log out\n"
-    "/cancel — रद्द करें / cancel\n\n"
+    "🤖 tg-digest control panel\n\n"
+    "Account\n"
+    "/login — QR login (scan from another device)\n"
+    "/login_phone — phone + code login\n"
+    "/status — login status\n"
+    "/logout — log out\n"
+    "/cancel — cancel a login\n\n"
+    "Channels\n"
+    "/channels [tag] — list channels\n"
+    "/add <link|@name|id> [| label]\n"
+    "/remove <#> · /pause <#> · /resume <#>\n"
+    "/tag <#> <tag> · /untag <#> <tag>\n"
+    "/groups — tag groups\n\n"
+    "Runs\n"
+    "/run <window> [group:<tag>] [channel:<n>] [dedupe] [min:<N>] [views] [send:no]\n"
+    "/stop · /preview <window> · /last\n"
+    "window: today | yesterday | 6h | 24h | 3d | since-last | <YYYY-MM-DD HH:MM> x2\n\n"
+    "Schedules (IST, max 5)\n"
+    "/schedule add <HH:MM> <window> [group:<tag>]\n"
+    "/schedule list | remove <n> | pause <n> | resume <n>\n\n"
+    "Settings & files\n"
+    "/settings · /set <key> <value>\n"
+    "/files · /clean · /find <keyword> [6h|24h|3d]\n\n"
+    "Health\n"
+    "/health · /panic\n\n"
     "2FA password के लिए terminal login सबसे सुरक्षित है।"
+)
+
+# The bot's command menu (Telegram shows this next to the input box).
+# Telegram limits: name 1-32 chars, no leading slash; description 3-256 chars.
+COMMAND_MENU = (
+    ("start", "शुरू / start"),
+    ("help", "मदद / help"),
+    ("login", "QR से लॉगिन"),
+    ("login_phone", "फ़ोन + कोड से लॉगिन"),
+    ("status", "लॉगिन स्थिति"),
+    ("logout", "लॉगआउट"),
+    ("cancel", "रद्द करें"),
+    ("channels", "चैनल सूची"),
+    ("add", "चैनल जोड़ें"),
+    ("remove", "चैनल हटाएँ"),
+    ("pause", "चैनल pause"),
+    ("resume", "चैनल resume"),
+    ("tag", "tag जोड़ें"),
+    ("untag", "tag हटाएँ"),
+    ("groups", "tag groups"),
+    ("run", "scraper चलाएँ"),
+    ("stop", "run रोकें"),
+    ("preview", "dry-run preview"),
+    ("last", "पिछला digest भेजें"),
+    ("schedule", "scheduled runs"),
+    ("settings", "सेटिंग्स देखें"),
+    ("set", "सेटिंग बदलें"),
+    ("files", "outputs सूची"),
+    ("clean", "पुरानी files हटाएँ"),
+    ("find", "digest में खोजें"),
+    ("health", "health जाँच"),
+    ("panic", "kill switch"),
 )
 
 

@@ -13,9 +13,11 @@ import contextlib
 import sys
 
 from telethon import TelegramClient, events
+from telethon.tl.functions.bots import SetBotCommandsRequest
+from telethon.tl.types import BotCommand, BotCommandScopeDefault
 
 import config
-from bot_handlers import BotApp
+from bot_handlers import COMMAND_MENU, BotApp
 from channel_store import ChannelStore
 from config import (
     BOT_LOG,
@@ -109,6 +111,11 @@ async def run_bot(settings=None) -> None:
         await app.handle_callback(event)
 
     await bot.start(bot_token=settings.bot_token)
+    with contextlib.suppress(Exception):  # the menu is cosmetic; never block startup
+        await bot(SetBotCommandsRequest(
+            scope=BotCommandScopeDefault(), lang_code="",
+            commands=[BotCommand(command=name, description=desc) for name, desc in COMMAND_MENU],
+        ))
     log.info("control bot started")
     with contextlib.suppress(Exception):  # retention at startup
         app._file_panel.run_retention()
