@@ -1,11 +1,22 @@
 # tg-digest-userbot
 
+[![Docs](https://img.shields.io/badge/docs-GitHub_Pages-d97757?logo=github&logoColor=white)](https://pavnxet.github.io/tg-digest-userbot/)
+[![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Telethon](https://img.shields.io/badge/telethon-1.45-2CA5E0)](https://github.com/LonamiWebs/Telethon)
+[![Tests](https://img.shields.io/badge/tests-527_passing-5f7a4f)](https://pavnxet.github.io/tg-digest-userbot/)
+[![User client](https://img.shields.io/badge/user_client-read--only-1f1e1d)](https://pavnxet.github.io/tg-digest-userbot/#s13)
+
+> **📖 New here?** The **[full command guide](https://pavnxet.github.io/tg-digest-userbot/)** walks through
+> every bot command with examples — channels, runs, schedules, prompts, files and health.
+
 A **read-only** Telegram *user bot* that reads the text of the channels **you**
 choose, for a time window **you** choose, and writes it to one structured JSON
 file you can paste into any AI (ChatGPT, Claude, Gemini…) for a summary.
 
 It is a personal, local tool. It never sends anything, never reacts, never marks
 messages as read, and never uploads or stores anything outside your machine.
+A separate **owner-only control bot** lets you drive it from your own Telegram
+chat: add channels, run a digest, schedule it, and search past outputs.
 
 ---
 
