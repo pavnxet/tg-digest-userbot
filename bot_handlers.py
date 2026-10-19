@@ -530,7 +530,14 @@ class BotApp:
             png = render_qr_png(qr.url)
             caption = ("QR scan करें: दूसरे device के Telegram में Settings > Devices > "
                        "Link Desktop Device.\nयह code जल्दी expire होता है।")
-            message = await self.bot.send_file(event.chat_id, png, caption=caption)
+            # Telethon decides "photo vs document" from the filename, so bare bytes
+            # (no name, no extension) go out as an application file. Give the PNG a
+            # name and ask for a photo so Telegram renders it inline.
+            image = io.BytesIO(png)
+            image.name = "login-qr.png"
+            message = await self.bot.send_file(
+                event.chat_id, image, caption=caption, force_document=False,
+            )
             self.manager.state.qr_message_id = getattr(message, "id", None)
         except Exception:  # noqa: BLE001
             self.log.warning("could not send the QR image")

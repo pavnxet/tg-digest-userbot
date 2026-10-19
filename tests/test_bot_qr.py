@@ -119,3 +119,21 @@ def test_second_login_while_active_is_refused(tmp_path):
 
     asyncio.run(scenario())
     assert any("पहले से चल रहा" in t for t in _sent_texts(bot))
+
+
+def test_qr_is_sent_as_a_photo_with_a_png_name(tmp_path):
+    # Regression: bare bytes (no name, no extension) were sent as an application
+    # file. The PNG must carry a .png name and force_document=False so Telegram
+    # renders it inline as a photo.
+    app, bot, user, owners, session = build_app(tmp_path)
+    user.qr_script = [("ok",)]
+
+    async def scenario():
+        await app.handle(FakeEvent(bot, "/login", OWNER))
+        await app.manager.state.qr_task
+
+    asyncio.run(scenario())
+    assert bot.file_meta, "the QR image was never sent"
+    meta = bot.file_meta[0]
+    assert meta["name"] and meta["name"].endswith(".png")
+    assert meta["force_document"] is False

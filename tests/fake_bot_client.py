@@ -47,6 +47,7 @@ class FakeBotClient:
     def __init__(self) -> None:
         self.sent: list[tuple] = []        # (chat_id, text, buttons, message)
         self.files: list[tuple] = []       # (chat_id, bytes, caption, message)
+        self.file_meta: list[dict] = []    # what was passed to send_file (name, force_document)
         self.edits: list[tuple] = []       # (chat_id, message_id, text)
         self.deleted: list[tuple] = []     # (chat_id, ids)
         self.calls: list[tuple] = []
@@ -66,9 +67,11 @@ class FakeBotClient:
         self.calls.append(("send_file", chat_id))
         if self.send_should_fail:
             raise RuntimeError("send failed")
+        name = getattr(file, "name", None)
         data = file.read() if hasattr(file, "read") else file
         message = FakeMessage()
         self.files.append((chat_id, data, caption, message))
+        self.file_meta.append({"name": name, "force_document": kwargs.get("force_document"), "caption": caption})
         return message
 
     async def edit_message(self, chat_id, message_id, text, **kwargs):
