@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tg-digest — Bot Command Guide</title>
+<meta name="description" content="How to use every command of the tg-digest control bot: channels, runs, schedules, prompts, files and more.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root, [data-theme="light"] {
+  --font-display: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+  --font-body: 'DM Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Consolas, monospace;
+
+  --bg: #f0eee6;
+  --surface: #faf9f5;
+  --surface-elevated: #ffffff;
+  --surface-recessed: #eae7dc;
+  --border: rgba(31, 30, 29, 0.10);
+  --border-bright: rgba(31, 30, 29, 0.20);
+  --text: #1f1e1d;
+  --text-dim: #6e6b64;
+  --text-bright: #100f0e;
+
+  --accent: #d97757;
+  --accent-deep: #b8593a;
+  --accent-dim: rgba(217, 119, 87, 0.12);
+  --green: #5f7a4f;
+  --green-dim: rgba(95, 122, 79, 0.12);
+  --amber: #b07d2b;
+  --amber-dim: rgba(176, 125, 43, 0.13);
+  --red: #b4472f;
+  --red-dim: rgba(180, 71, 47, 0.12);
+  --shadow: 0 2px 10px rgba(31, 30, 29, 0.05), 0 1px 2px rgba(31, 30, 29, 0.04);
+}
+
+[data-theme="dark"] {
+  --bg: #1b1a19;
+  --surface: #242322;
+  --surface-elevated: #2c2b29;
+  --surface-recessed: #1f1e1d;
+  --border: rgba(240, 238, 230, 0.10);
+  --border-bright: rgba(240, 238, 230, 0.22);
+  --text: #f0eee6;
+  --text-dim: #a5a29a;
+  --text-bright: #ffffff;
+  --accent: #e08a6b;
+  --accent-deep: #d97757;
+  --accent-dim: rgba(224, 138, 107, 0.15);
+  --green: #8fae7c;
+  --green-dim: rgba(143, 174, 124, 0.15);
+  --amber: #d9a95c;
+  --amber-dim: rgba(217, 169, 92, 0.15);
+  --red: #e0796a;
+  --red-dim: rgba(224, 121, 106, 0.15);
+  --shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  background-color: var(--bg);
+  background-image: radial-gradient(ellipse 80% 50% at 50% -10%, var(--accent-dim), transparent 70%);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.65;
+  overflow-wrap: break-word;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- Hero ---------- */
+.hero {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 72px 40px 36px;
+}
+.hero__eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 18px;
+}
+.hero h1 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(44px, 7vw, 82px);
+  line-height: 1.02;
+  letter-spacing: -0.5px;
+  margin: 0 0 16px;
+  color: var(--text-bright);
+}
+.hero h1 em { font-style: italic; color: var(--accent); }
+.hero__sub {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: clamp(19px, 2.4vw, 26px);
+  color: var(--text-dim);
+  max-width: 46ch;
+  margin: 0 0 26px;
+}
+.hero__badges { display: flex; flex-wrap: wrap; gap: 8px; }
+.badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+.badge--accent { background: var(--accent-dim); border-color: transparent; color: var(--accent-deep); }
+[data-theme="dark"] .badge--accent { color: var(--accent); }
+
+/* ---------- Layout ---------- */
+.wrap {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 40px 120px;
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 0 48px;
+}
+.main { min-width: 0; }
+
+/* ---------- TOC ---------- */
+.toc {
+  position: sticky;
+  top: 24px;
+  align-self: start;
+  grid-row: 1 / -1;
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  padding: 14px 0;
+}
+.toc::-webkit-scrollbar { width: 3px; }
+.toc::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+.toc-title {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+  padding: 0 0 10px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.toc a {
+  display: block;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  text-decoration: none;
+  padding: 5px 9px;
+  border-radius: 6px;
+  border-left: 2px solid transparent;
+  transition: all 0.15s;
+  line-height: 1.35;
+  margin-bottom: 1px;
+}
+.toc a:hover { color: var(--text); background: var(--surface); }
+.toc a.active { color: var(--accent-deep); border-left-color: var(--accent); background: var(--accent-dim); }
+[data-theme="dark"] .toc a.active { color: var(--accent); }
+
+/* ---------- Section headings ---------- */
+.sec-head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin: 56px 0 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  scroll-margin-top: 20px;
+}
+.sec-head__num {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 1px;
+}
+.sec-head h2 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(28px, 3.4vw, 40px);
+  line-height: 1.1;
+  margin: 0;
+  color: var(--text-bright);
+  letter-spacing: -0.3px;
+}
+.lead {
+  font-size: 18px;
+  line-height: 1.6;
+  color: var(--text);
+  max-width: 68ch;
+  margin: 0 0 22px;
+}
+p { max-width: 72ch; }
+h3 {
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--text-bright);
+  margin: 32px 0 12px;
+}
+a { color: var(--accent-deep); }
+[data-theme="dark"] a { color: var(--accent); }
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--accent-dim);
+  color: var(--accent-deep);
+  padding: 1.5px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+[data-theme="dark"] code { color: var(--accent); }
+
+/* ---------- Pipeline ---------- */
+.pipeline {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  overflow-x: auto;
+  padding: 4px 0 14px;
+  margin-bottom: 8px;
+}
+.pipe-step {
+  min-width: 168px;
+  flex: 1 1 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  box-shadow: var(--shadow);
+}
+.pipe-step__k {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+.pipe-step__t { font-weight: 600; font-size: 14.5px; margin-bottom: 4px; color: var(--text-bright); }
+.pipe-step__d { font-size: 12.5px; color: var(--text-dim); line-height: 1.5; }
+.pipe-arrow {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  color: var(--border-bright);
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+/* ---------- Cards ---------- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 22px 26px;
+  box-shadow: var(--shadow);
+  margin: 18px 0;
+}
+.card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; margin: 18px 0; }
+.card-grid > * { min-width: 0; }
+.card--accent { border-left: 3px solid var(--accent); }
+
+/* ---------- Steps ---------- */
+.steps { counter-reset: step; list-style: none; padding: 0; margin: 18px 0; }
+.steps li {
+  counter-increment: step;
+  position: relative;
+  padding: 0 0 20px 52px;
+  border-left: 1px solid var(--border);
+  margin-left: 16px;
+}
+.steps li:last-child { border-left-color: transparent; padding-bottom: 0; }
+.steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: -16px;
+  top: -2px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.steps strong { color: var(--text-bright); }
+
+/* ---------- Tables ---------- */
+.table-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  margin: 18px 0;
+  box-shadow: var(--shadow);
+}
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 13.5px; line-height: 1.5; }
+.data-table thead { position: sticky; top: 0; z-index: 2; }
+.data-table th {
+  background: var(--surface-recessed);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  text-align: left;
+  padding: 12px 16px;
+  border-bottom: 2px solid var(--border-bright);
+  white-space: nowrap;
+}
+.data-table td { padding: 12px 16px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.data-table tbody tr:nth-child(even) { background: color-mix(in srgb, var(--surface-recessed) 45%, transparent); }
+.data-table tbody tr:hover { background: var(--accent-dim); }
+.data-table tbody tr:last-child td { border-bottom: none; }
+.data-table code { white-space: normal; }
+.data-table .cmd { font-family: var(--font-mono); font-size: 12.5px; font-weight: 500; color: var(--text-bright); }
+.data-table td.wide { min-width: 260px; }
+
+/* ---------- Code blocks ---------- */
+.code-block {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  background: var(--surface-recessed);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 14px 0;
+  color: var(--text);
+}
+.code-block .c { color: var(--text-dim); }
+.code-block .k { color: var(--accent-deep); font-weight: 600; }
+[data-theme="dark"] .code-block .k { color: var(--accent); }
+
+/* ---------- Callouts ---------- */
+.callout {
+  padding: 16px 20px;
+  border-radius: 10px;
+  border-left: 4px solid var(--accent);
+  background: var(--accent-dim);
+  margin: 20px 0;
+  font-size: 14.5px;
+}
+.callout--warn { border-left-color: var(--amber); background: var(--amber-dim); }
+.callout--good { border-left-color: var(--green); background: var(--green-dim); }
+.callout__t { font-weight: 700; margin-bottom: 5px; color: var(--text-bright); }
+.callout p { margin: 0; }
+.callout ul { margin: 8px 0 0; padding-left: 1.3em; }
+
+/* ---------- Status pills ---------- */
+.pill {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.pill--ok { background: var(--green-dim); color: var(--green); }
+.pill--warn { background: var(--amber-dim); color: var(--amber); }
+.pill--no { background: var(--red-dim); color: var(--red); }
+
+/* ---------- Theme toggle ---------- */
+.theme-toggle {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  width: 40px;
+  height: 40px;
+  cursor: pointer;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  box-shadow: var(--shadow);
+}
+.theme-toggle:hover { color: var(--accent); }
+[data-theme="light"] .theme-toggle__moon { display: none; }
+[data-theme="dark"] .theme-toggle__sun { display: none; }
+
+footer {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 40px;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+/* ---------- Animations ---------- */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+.pipe-step, .card, .table-wrap, .steps li {
+  animation: fadeUp 0.45s ease-out both;
+  animation-delay: calc(var(--i, 0) * 0.045s);
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  html { scroll-behavior: auto; }
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 1000px) {
+  .wrap { grid-template-columns: 1fr; gap: 0; padding: 0 24px 100px; }
+  .hero { padding: 60px 24px 28px; }
+  .toc {
+    position: sticky;
+    top: 0;
+    z-index: 200;
+    max-height: none;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    overflow-x: auto;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 24px;
+    margin: 0 -24px;
+    grid-row: auto;
+  }
+  .toc::-webkit-scrollbar { display: none; }
+  .toc-title { display: none; }
+  .toc a {
+    white-space: nowrap;
+    flex-shrink: 0;
+    border-left: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 6px 6px 0 0;
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+  .toc a.active { border-left: none; border-bottom-color: var(--accent); background: var(--surface); }
+  .sec-head { scroll-margin-top: 56px; }
+  .pipeline { flex-direction: column; gap: 8px; }
+  .pipe-arrow { display: none; }
+}
+</style>
+</head>
+<body>
+
+<button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle colour theme">
+  <svg class="theme-toggle__sun" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>
+  <svg class="theme-toggle__moon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg>
+</button>
+
+<header class="hero">
+  <div class="hero__eyebrow">Telegram control bot · user guide</div>
+  <h1>tg-digest <em>command guide</em></h1>
+  <p class="hero__sub">Every command of the bot, what it does, and how to use it — from adding a channel to scheduling a digest.</p>
+  <div class="hero__badges">
+    <span class="badge badge--accent">owner-only</span>
+    <span class="badge">read-only scraper</span>
+    <span class="badge">no AI calls</span>
+    <span class="badge">29 commands</span>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="toc" id="toc">
+    <div class="toc-title">Contents</div>
+    <a href="#s1">1. What it is</a>
+    <a href="#s2">2. Quick start</a>
+    <a href="#s3">3. Logging in</a>
+    <a href="#s4">4. All commands</a>
+    <a href="#s5">5. channels.txt</a>
+    <a href="#s6">6. Running a digest</a>
+    <a href="#s7">7. Schedules</a>
+    <a href="#s8">8. Settings</a>
+    <a href="#s9">9. Prompts</a>
+    <a href="#s10">10. Files &amp; search</a>
+    <a href="#s11">11. Health &amp; panic</a>
+    <a href="#s12">12. Troubleshooting</a>
+    <a href="#s13">13. Security</a>
+    <a href="#s14">14. FAQ</a>
+  </nav>
+
+  <div class="main">
+
+    <!-- ============ 1 ============ -->
+    <div id="s1" class="sec-head"><span class="sec-head__num">01</span><h2>What it is</h2></div>
+    <p class="lead">tg-digest has two parts. A <strong>read-only scraper</strong> collects messages from the Telegram channels you choose and writes them to a JSON file. A <strong>control bot</strong> lets you drive that scraper entirely from a private Telegram chat with your own bot.</p>
+
+    <div class="pipeline">
+      <div class="pipe-step" style="--i:0"><div class="pipe-step__k">Source</div><div class="pipe-step__t">Your channels</div><div class="pipe-step__d">Public or joined channels &amp; groups.</div></div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-step" style="--i:1"><div class="pipe-step__k">Scraper</div><div class="pipe-step__t"><code>main.py</code></div><div class="pipe-step__d">Reads messages. Never sends, edits or reacts.</div></div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-step" style="--i:2"><div class="pipe-step__k">Output</div><div class="pipe-step__t">Digest JSON</div><div class="pipe-step__d">One file, with a summary prompt embedded.</div></div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-step" style="--i:3"><div class="pipe-step__k">You</div><div class="pipe-step__t">Paste into any AI</div><div class="pipe-step__d">The bot never contacts an AI service.</div></div>
+    </div>
+
+    <div class="callout">
+      <div class="callout__t">The bot is the remote control</div>
+      <p>The bot never scrapes by itself. When you send <code>/run</code>, it starts <code>main.py</code> as a separate process and reports progress back in the chat.</p>
+    </div>
+
+    <!-- ============ 2 ============ -->
+    <div id="s2" class="sec-head"><span class="sec-head__num">02</span><h2>Quick start</h2></div>
+    <ol class="steps">
+      <li style="--i:0"><strong>Install.</strong><br><span class="code-block">pip install -r requirements.txt</span></li>
+      <li style="--i:1"><strong>Create your bot.</strong> Talk to <strong>@BotFather</strong> in Telegram, send <code>/newbot</code>, follow the prompts, and copy the token it gives you.</li>
+      <li style="--i:2"><strong>Fill in <code>.env</code>.</strong> Copy <code>.env.example</code> to <code>.env</code> and set:
+        <span class="code-block">API_ID=1234567
+API_HASH=...        <span class="c"># from my.telegram.org</span>
+BOT_TOKEN=...       <span class="c"># from @BotFather</span>
+OWNER_ID=...        <span class="c"># your numeric Telegram id (or leave blank)</span></span>
+      </li>
+      <li style="--i:3"><strong>Start the bot.</strong> <span class="code-block">python bot.py</span> If you left <code>OWNER_ID</code> blank it prints a <em>pairing code</em> in the terminal — send <code>/claim &lt;code&gt;</code> to your bot from your own account.</li>
+      <li style="--i:4"><strong>Log in.</strong> Send <code>/login</code> and scan the QR with a second device. Then <code>/run today</code>.</li>
+    </ol>
+
+    <!-- ============ 3 ============ -->
+    <div id="s3" class="sec-head"><span class="sec-head__num">03</span><h2>Logging in</h2></div>
+    <p class="lead">The bot logs in your <em>user</em> account (not the bot) so the scraper can read your channels. Do it once; the session is saved.</p>
+    <div class="table-wrap"><div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td class="cmd">/login</td><td class="wide">QR login (recommended). Shows a QR image; scan it from a second device (Telegram &rarr; Settings &rarr; Devices &rarr; Link Desktop Device). Refreshes up to 3 times, ~2–3 min.</td></tr>
+        <tr><td class="cmd">/login_phone</td><td class="wide">Fallback: type your phone, then the code Telegram sends. Type the code with separators (e.g. <code>1-2-3-4-5</code>). Telegram may reject codes sent through a chat — if so, use <code>/login</code>.</td></tr>
+        <tr><td class="cmd">/status</td><td class="wide">Shows whether you're logged in, your first name, and only the last 2 digits of your phone.</td></tr>
+        <tr><td class="cmd">/logout</td><td class="wide">Confirms, logs out on Telegram's side, and deletes the local session file.</td></tr>
+        <tr><td class="cmd">/cancel</td><td class="wide">Aborts a login in progress and clears the state.</td></tr>
+      </tbody>
+    </table>
+    </div></div>
+    <div class="callout callout--warn">
+      <div class="callout__t">The chat is not end-to-end encrypted</div>
+      <p>Anything you type in the bot chat is stored on Telegram's servers. The bot deletes your code/password messages immediately, but for the 2FA password the terminal login (<code>python main.py --terminal-login</code>) is safest.</p>
+    </div>
+
+    <!-- ============ 4 ============ -->
+    <div id="s4" class="sec-head"><span class="sec-head__num">04</span><h2>All commands</h2></div>
+    <p class="lead">Every command is owner-only and works in a private chat with your bot. Anyone else gets no reply at all.</p>
+
+    <h3>Channels</h3>
+    <div class="table-wrap"><div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Command</th><th>What it does</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td class="cmd">/channels [tag]</td><td class="wide">Lists your channels, 20 per page, with paused and invalid marks. Optional tag filter.</td><td class="cmd">/channels jobs</td></tr>
+        <tr><td class="cmd">/add &lt;link|@name|id&gt; [| label]</td><td class="wide">Validates the channel (read-only) and appends it. Shows the resolved title and whether you're a member.</td><td class="cmd">/add @news | Daily</td></tr>
+        <tr><td class="cmd">/remove &lt;#|link|name&gt;</td><td class="wide">Removes a channel after confirmation. If the match is ambiguous it asks which one.</td><td class="cmd">/remove 3</td></tr>
+        <tr><td class="cmd">/pause &lt;#&gt;</td><td class="wide">Marks a line <code>off</code> — the scraper skips it and reports it as paused.</td><td class="cmd">/pause 2</td></tr>
+        <tr><td class="cmd">/resume &lt;#&gt;</td><td class="wide">Removes the <code>off</code> mark.</td><td class="cmd">/resume 2</td></tr>
+        <tr><td class="cmd">/tag &lt;#&gt; &lt;tag&gt;</td><td class="wide">Adds a tag so you can run a subset with <code>group:&lt;tag&gt;</code>.</td><td class="cmd">/tag 1 news</td></tr>
+        <tr><td class="cmd">/untag &lt;#&gt; &lt;tag&gt;</td><td class="wide">Removes a tag.</td><td class="cmd">/untag 1 news</td></tr>
+        <tr><td class="cmd">/groups</td><td class="wide">Lists your tag groups with counts.</td><td class="cmd">/groups</td></tr>
+      </tbody>
+    </table>
+    </div></div>
+
+    <h3>Running</h3>
+    <div class="table-wrap"><div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Command</th><th>What it does</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td class="cmd">/run &lt;window&gt; [options]</td><td class="wide">Runs the scraper and sends you the digest. See <a href="#s6">section 6</a> for options.</td><td class="cmd">/run today</td></tr>
+        <tr><td class="cmd">/preview &lt;window&gt; [group:&lt;tag&gt;]</td><td class="wide">Dry run — shows how many messages each channel has. No file is written.</td><td class="cmd">/preview 24h</td></tr>
+        <tr><td class="cmd">/stop</td><td class="wide">Kills the running scrape (the whole process tree).</td><td class="cmd">/stop</td></tr>
+        <tr><td class="cmd">/last</td><td class="wide">Resends the most recent digest file(s).</td><td class="cmd">/last</td></tr>
+      </tbody>
+    </table>
+    </div></div>
+
+    <h3>Schedules</h3>
+    <div class="table-wrap"><div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Command</th><th>What it does</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td class="cmd">/schedule add &lt;HH:MM&gt; &lt;window&gt; [group:&lt;tag&gt;]</td><td class="wide">Adds a daily run at that IST time (max 5 schedules).</td><td class="cmd">/schedule add 09:00 today</td></tr>
+        <tr><td class="cmd">/schedule list</td><td class="wide">Lists schedules with their numbers.</td><td class="cmd">/schedule list</td></tr>
+        <tr><td class="cmd">/schedule remove &lt;n&gt;</td><td class="wide">Removes a schedule (after confirmation).</td><td class="cmd">/schedule remove 1</td></tr>
+        <tr><td class="cmd">/schedule pause &lt;n&gt;</td><td class="wide">Temporarily stops a schedule.</td><td class="cmd">/schedule pause 1</td></tr>
+        <tr><td class="cmd">/schedule resume &lt;n&gt;</td><td class="wide">Restarts a paused schedule.</td><td class="cmd">/schedule resume 1</td></tr>
+      </tbody>
+    </table>
+    </div></div>
+
+    <h3>Settings &amp; prompts</h3>
+    <div class="table-wrap"><div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Command</th><th>What it does</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td class="cmd">/settings</td><td class="wide">Shows every setting and its current value.</td><td class="cmd">/settings</td></tr>
+        <tr><td class="cmd">/set &lt;key&gt; &lt;value&gt;</td><td class="wide">Changes one setting (validated). See <a href="#s8">section 8</a>.</td><td class="cmd">/set dedupe on</td></tr>
+        <tr><td class="cmd">/prompts</td><td class="wide">Lists the available summary prompts and marks the selected one.</td><td class="cmd">/prompts</td></tr>
+        <tr><td class="cmd">/prompt &lt;name&gt;</td><td class="wide">Sends a prompt's text back to you (as a message, or a <code>.md</code> file if long).</td><td class="cmd">/prompt detailed</td></tr>
+      </tbody>
+    </table>
+    </div></div>
+
+    <h3>Files, health &amp; safety</h3>
+    <div class="table-wrap"><div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Command</th><th>What it does</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td class="cmd">/files</td><td class="wide">Lists recent outputs with buttons to resend any of them.</td><td class="cmd">/files</td></tr>
+        <tr><td class="cmd">/clean</td><td class="wide">Deletes outputs older than <code>retention_days</code> (after confirmation).</td><td class="cmd">/clean</td></tr>
+        <tr><td class="cmd">/find &lt;keyword&gt; [6h|24h|3d]</td><td class="wide">Searches saved digests locally — no Telegram call. Up to 10 matches with links.</td><td class="cmd">/find result</td></tr>
+        <tr><td class="cmd">/health</td><td class="wide">Login state, last run, next schedule, disk space, versions, uptime.</td><td class="cmd">/health</td></tr>
+        <tr><td class="cmd">/panic</td><td class="wide">Kill switch (two confirmations). See <a href="#s11">section 11</a>.</td><td class="cmd">/panic</td></tr>
+      </tbody>
+    </table>
+    </div></div>
+
+    <!-- ============ 5 ============ -->
+    <div id="s5" class="sec-head"><span class="sec-head__num">05</span><h2>channels.txt</h2></div>
+    <p class="lead">Your channel list is a plain text file. The bot edits it for you, but you can also edit it by hand.</p>
+    <span class="code-block"><span class="c"># a comment — ignored</span>
+@news | Daily News | <span class="k">tags=</span>news,jobs | <span class="k">off</span>
+https://t.me/somechannel | Some Channel
+-1001234567890</span>
+    <div class="table-wrap"><div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Segment</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td class="cmd">entry</td><td class="wide"><code>@name</code>, <code>https://t.me/name</code>, <code>t.me/name</code>, a post link, or a numeric id.</td></tr>
+        <tr><td class="cmd">| label</td><td class="wide">A friendly name shown in <code>/channels</code> and in the digest.</td></tr>
+        <tr><td class="cmd">| tags=a,b</td><td class="wide">Tags for grouping. Run just a group with <code>/run today group:a</code>.</td></tr>
+        <tr><td class="cmd">| off</td><td class="wide">Pauses the line — the scraper skips it and reports it as <code>paused</code>.</td></tr>
+      </tbody>
+    </table>
+    </div></div>
+    <p>Old two-column lines (<code>entry | label</code>) keep working unchanged. The file is edited line-by-line, so comments, blank lines and order are preserved, and a <code>channels.txt.bak</code> backup is kept before every change.</p>
+
+    <!-- ============ 6 ============ -->
+    <div id="s6" class="sec-head"><span class="sec-head__num">06</span><h2>Running a digest</h2></div>
+    <p class="lead">The shape of a run command is: <code>/run &lt;window&gt; [options…]</code></p>
+    <h3>Windows (pick one)</h3>
+    <div class="table-wrap"><div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Window</th><th>Means</th></tr></thead>
+      <tbody>
+        <tr><td class="cmd">today</td><td class="wide">From midnight IST until now.</td></tr>
+        <tr><td class="cmd">yesterday</td><td class="wide">The whole previous day (IST).</td></tr>
+        <tr><td class="cmd">6h · 24h · 3d</td><td class="wide">The last N hours / days from now.</td></tr>
+        <tr><td class="cmd">since-last</td><td class="wide">Everything since the last successful run.</td></tr>
+        <tr><td class="cmd">&lt;YYYY-MM-DD HH:MM&gt; &lt;YYYY-MM-DD HH:MM&gt;</td><td class="wide">An explicit IST range: start and end.</td></tr>
+      </tbody>
+    </table>
+    </div></div>
+    <h3>Options (any order, all optional)</h3>
+    <div class="table-wrap"><div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Option</th><th>Effect</th></tr></thead>
+      <tbody>
+        <tr><td class="cmd">group:&lt;tag&gt;</td><td class="wide">Only channels carrying that tag.</td></tr>
+        <tr><td class="cmd">channel:&lt;n&gt;</td><td class="wide">Only channel number <code>n</code> from <code>/channels</code>.</td></tr>
+        <tr><td class="cmd">dedupe</td><td class="wide">Drop near-duplicate messages.</td></tr>
+        <tr><td class="cmd">min:&lt;N&gt;</td><td class="wide">Skip messages shorter than N characters (0–500).</td></tr>
+        <tr><td class="cmd">views</td><td class="wide">Include view counts.</td></tr>
+        <tr><td class="cmd">send:no</td><td class="wide">Run but don't send me the file.</td></tr>
+      </tbody>
+    </table>
+    </div></div>
+    <span class="code-block"><span class="c"># today's messages, only the "jobs" group, skip short posts, no file</span>
+/run today group:jobs min:40 send:no
+
+<span class="c"># an explicit IST range</span>
+/run 2026-10-17 06:00 2026-10-18 18:00</span>
+
+    <div class="callout callout--warn">
+      <div class="callout__t">Run limits protect your account</div>
+      <ul>
+        <li>One run at a time.</li>
+        <li>At least <strong>5 minutes</strong> between runs.</li>
+        <li>At most <strong>12 runs per day</strong> (manual and scheduled share the limit).</li>
+        <li>A hard <strong>30-minute timeout</strong>, after which the process tree is killed.</li>
+      </ul>
+    </div>
+    <p>While a run is going, the bot keeps <strong>one status message</strong> updated (at most every 10 seconds) showing the elapsed time and progress like <code>channel 3/12</code>. When it finishes you get a summary — channels ok, messages, skipped channels and reasons, truncated channels, estimated tokens — and the digest arrives as a document. If there are more than 10 parts it asks before sending.</p>
+
+    <!-- ============ 7 ============ -->
+    <div id="s7" class="sec-head"><span class="sec-head__num">07</span><h2>Schedules</h2></div>
+    <p class="lead">A schedule runs a digest for you every day at a fixed IST time. You can keep up to five.</p>
+    <span class="code-block"><span class="c"># every day at 9:00 IST, today's messages</span>
+/schedule add 09:00 today
+
+<span class="c"># every evening at 20:30, last 24 hours, only the "news" group</span>
+/schedule add 20:30 24h group:news
+
+/schedule list
+/schedule pause 2
+/schedule resume 2
+/schedule remove 1</span>
+    <div class="callout">
+      <div class="callout__t">Missed runs are not caught up</div>
+      <p>If the bot was off at the scheduled time, it does <em>not</em> run late. When it starts again it tells you what was missed and offers a <strong>Run now</strong> button. If a run is already going, a scheduled run is skipped with a message.</p>
+    </div>
+    <p>The bot must be running for schedules to fire. Run it under <code>systemd</code>, <code>tmux</code> or <code>screen</code> — a laptop that sleeps, or Termux with the screen off, will stop it.</p>
+
+    <!-- ============ 8 ============ -->
+    <div id="s8" class="sec-head"><span class="sec-head__num">08</span><h2>Settings</h2></div>
+    <p class="lead"><code>/settings</code> shows all of these. <code>/set &lt;key&gt; &lt;value&gt;</code> changes one — invalid values are rejected without changing anything.</p>
+    <div class="table-wrap"><div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Key</th><th>Values</th><th>Default</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td class="cmd">format</td><td class="cmd">json · jsonl · txt</td><td class="cmd">json</td><td class="wide">Output file format.</td></tr>
+        <tr><td class="cmd">dedupe</td><td class="cmd">on · off</td><td class="cmd">off</td><td class="wide">Drop near-duplicate messages.</td></tr>
+        <tr><td class="cmd">min_chars</td><td class="cmd">0–500</td><td class="cmd">0</td><td class="wide">Skip messages shorter than this.</td></tr>
+        <tr><td class="cmd">with_views</td><td class="cmd">on · off</td><td class="cmd">off</td><td class="wide">Include view counts.</td></tr>
+        <tr><td class="cmd">max_chars</td><td class="cmd">50000–1000000</td><td class="cmd">300000</td><td class="wide">Max size of one output part; larger digests are split.</td></tr>
+        <tr><td class="cmd">max_per_channel</td><td class="cmd">100–20000</td><td class="cmd">5000</td><td class="wide">Cap messages read per channel.</td></tr>
+        <tr><td class="cmd">retention_days</td><td class="cmd">1–60</td><td class="cmd">7</td><td class="wide">Delete output files older than this.</td></tr>
+        <tr><td class="cmd">autodelete_minutes</td><td class="cmd">0–1440</td><td class="cmd">0</td><td class="wide">Auto-delete the bot's sent digest messages (0 = off).</td></tr>
+        <tr><td class="cmd">summary_prompt</td><td class="cmd">a prompt name</td><td class="cmd">default</td><td class="wide">Which prompt is embedded in new digests.</td></tr>
+      </tbody>
+    </table>
+    </div></div>
+    <span class="code-block">/set format jsonl
+/set dedupe on
+/set min_chars 40
+/set summary_prompt exam_alerts</span>
+
+    <!-- ============ 9 ============ -->
+    <div id="s9" class="sec-head"><span class="sec-head__num">09</span><h2>Prompts</h2></div>
+    <p class="lead">A prompt is just text embedded in the digest file as <code>ai_instructions</code>. When you paste the file into an AI, that text tells it what to do. <strong>The bot never calls an AI service itself.</strong></p>
+    <div class="table-wrap"><div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Name</th><th>Use it for</th></tr></thead>
+      <tbody>
+        <tr><td class="cmd">default</td><td class="wide">Short instructions embedded in every digest — a good all-round summary.</td></tr>
+        <tr><td class="cmd">detailed</td><td class="wide">A full structured brief: coverage, top 10, per-channel, dates table, action items, conflicts, unverified.</td></tr>
+        <tr><td class="cmd">exam_alerts</td><td class="wide">Jobs, recruitment and exam updates — notifications, a dates calendar, results, "verify first".</td></tr>
+        <tr><td class="cmd">news_brief</td><td class="wide">News and current affairs grouped by topic, with facts vs claims.</td></tr>
+        <tr><td class="cmd">merge_parts</td><td class="wide">Combine the summaries of several parts into one final summary.</td></tr>
+        <tr><td class="cmd">ask</td><td class="wide">Answer one question from the digest (put your question after <code>QUESTION:</code>).</td></tr>
+      </tbody>
+    </table>
+    </div></div>
+    <h3>Three ways to summarise</h3>
+    <div class="card-grid">
+      <div class="card card--accent" style="--i:0"><div class="pipe-step__k">Quick</div><p style="margin:0">Open the digest in any AI chat. The embedded <code>ai_instructions</code> already does the job.</p></div>
+      <div class="card card--accent" style="--i:1"><div class="pipe-step__k">Stronger</div><p style="margin:0">Choose a prompt: <code>/set summary_prompt detailed</code>, then run. Or <code>--summary-prompt detailed</code> on the CLI.</p></div>
+      <div class="card card--accent" style="--i:2"><div class="pipe-step__k">Multi-part</div><p style="margin:0">Summarise each part, then give the AI the <code>merge_parts</code> prompt plus the part summaries.</p></div>
+    </div>
+    <div class="callout callout--warn">
+      <div class="callout__t">Privacy</div>
+      <p>A digest can contain private channel content. Whatever AI service you paste it into will receive that content. <strong>The bot itself never contacts an AI service</strong> — it only stores, selects and embeds prompt text.</p>
+    </div>
+    <h3>Adding your own prompt</h3>
+    <p>Drop a <code>.md</code> file into <code>prompts/</code>. The first line must be <code># &lt;name&gt; - &lt;description&gt;</code> and the file must stay under 8000 characters. It then appears in <code>/prompts</code> and can be selected with <code>/set summary_prompt &lt;name&gt;</code>.</p>
+
+    <!-- ============ 10 ============ -->
+    <div id="s10" class="sec-head"><span class="sec-head__num">10</span><h2>Files &amp; search</h2></div>
+    <div class="card-grid">
+      <div class="card" style="--i:0"><div class="pipe-step__k">/files</div><p style="margin:0">Lists recent digests (name, size, time, message count) with a button to resend any of them.</p></div>
+      <div class="card" style="--i:1"><div class="pipe-step__k">/clean</div><p style="margin:0">Deletes output files older than <code>retention_days</code>, after a confirmation.</p></div>
+      <div class="card" style="--i:2"><div class="pipe-step__k">/find</div><p style="margin:0">Searches saved digests <em>locally</em> — no Telegram call, works with Hindi text. Up to 10 matches with links.</p></div>
+    </div>
+    <span class="code-block"><span class="c"># find a keyword in the last 24 hours of digests</span>
+/find admit-card 24h</span>
+    <p>Retention also runs automatically: at startup and once a day, files older than <code>retention_days</code> in the output folder are removed. It only ever touches that folder, and never follows a symlink out of it.</p>
+
+    <!-- ============ 11 ============ -->
+    <div id="s11" class="sec-head"><span class="sec-head__num">11</span><h2>Health &amp; panic</h2></div>
+    <p class="lead"><code>/health</code> is a read-only check-up. <code>/panic</code> is the emergency stop.</p>
+    <div class="card">
+      <div class="pipe-step__k">/health shows</div>
+      <p style="margin:0">Logged in or not · session file present · last run (result, time, duration) · skipped channels from the last run · next scheduled run · free disk space in the output folder · library versions · bot uptime. No secrets, no full phone number.</p>
+    </div>
+    <div class="card card--accent">
+      <div class="pipe-step__k">/panic does (two confirmations)</div>
+      <ul style="margin:8px 0 0">
+        <li>Pauses all schedules.</li>
+        <li>Stops any running scrape.</li>
+        <li>Logs out and deletes the local session file.</li>
+        <li>Deletes the output files and <code>.cache/</code> — but <strong>keeps</strong> <code>.cache/run_history.json</code> and <code>.cache/run.lock</code> so your daily/gap limits survive.</li>
+        <li>Keeps <code>channels.txt</code> and <code>settings.json</code>.</li>
+        <li>Reports every step honestly, including partial failures.</li>
+      </ul>
+    </div>
+
+    <!-- ============ 12 ============ -->
+    <div id="s12" class="sec-head"><span class="sec-head__num">12</span><h2>Troubleshooting</h2></div>
+    <div class="table-wrap"><div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Symptom</th><th>Fix</th></tr></thead>
+      <tbody>
+        <tr><td class="cmd">Bot replies to nobody / nothing happens</td><td class="wide">Check <code>OWNER_ID</code> is your numeric id, or that you claimed ownership with <code>/claim &lt;code&gt;</code>. Non-owners are silently ignored.</td></tr>
+        <tr><td class="cmd">"Not logged in"</td><td class="wide">Send <code>/login</code> and scan the QR. Or run <code>python main.py --terminal-login</code>.</td></tr>
+        <tr><td class="cmd">database is locked</td><td class="wide">A scrape is using the session file. Wait for it to finish; the bot retries cleanly.</td></tr>
+        <tr><td class="cmd">QR will not scan</td><td class="wide">Open the QR from a <em>second</em> device (Settings &rarr; Devices &rarr; Link Desktop Device) while the bot is still waiting, then <code>/login</code> again.</td></tr>
+        <tr><td class="cmd">Code rejected right after typing</td><td class="wide">Telegram may block codes sent through a chat. Use <code>/login</code> (QR) or the terminal.</td></tr>
+        <tr><td class="cmd">Run refused</td><td class="wide">You hit a limit — 5-minute gap, 12 runs/day, or a run already in progress. The message tells you which.</td></tr>
+        <tr><td class="cmd">Schedule did not fire</td><td class="wide">The bot must be running. A missed run is offered as a <strong>Run now</strong> button when the bot starts.</td></tr>
+        <tr><td class="cmd">Help text looks odd</td><td class="wide">Restart the bot — messages are sent as plain text so underscores and <code>&lt;placeholders&gt;</code> render literally.</td></tr>
+      </tbody>
+    </table>
+    </div></div>
+
+    <!-- ============ 13 ============ -->
+    <div id="s13" class="sec-head"><span class="sec-head__num">13</span><h2>Security</h2></div>
+    <div class="card-grid">
+      <div class="card" style="--i:0"><div class="pipe-step__k">Owner-only</div><p style="margin:0">Identified by your numeric Telegram id, never a username. Every handler checks it before doing anything; everyone else is dropped with no reply and no log.</p></div>
+      <div class="card" style="--i:1"><div class="pipe-step__k">Read-only scraper</div><p style="margin:0">The user client never sends, edits, deletes, forwards, reacts or marks read. An automated scan of the source enforces this.</p></div>
+      <div class="card" style="--i:2"><div class="pipe-step__k">No shell</div><p style="margin:0">The scraper runs as a separate process with an argument list — never a shell string — and only validated values reach it.</p></div>
+      <div class="card" style="--i:3"><div class="pipe-step__k">Secrets stay out</div><p style="margin:0">API keys, tokens, phone number and session files are never logged, never sent to the chat, and never committed to git.</p></div>
+    </div>
+    <div class="callout">
+      <div class="callout__t">The chat is not end-to-end encrypted</div>
+      <p>Sensitive inputs (phone, login code, 2FA password) are deleted from the chat right after they are read, but Telegram's servers hold them until then. For the 2FA password, the terminal login is the safest option.</p>
+    </div>
+
+    <!-- ============ 14 ============ -->
+    <div id="s14" class="sec-head"><span class="sec-head__num">14</span><h2>FAQ</h2></div>
+    <div class="table-wrap"><div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Question</th><th>Answer</th></tr></thead>
+      <tbody>
+        <tr><td class="wide"><strong>Does it download the files in a channel?</strong></td><td class="wide">No. It records a label in the <code>media</code> field. For a document it includes the filename (<code>document:notice.pdf</code>); for video, audio, voice, GIF and stickers it records only the type.</td></tr>
+        <tr><td class="wide"><strong>Does it join channels?</strong></td><td class="wide">Never from the bot. Joining only happens in the terminal scraper with the explicit <code>--auto-join</code> flag.</td></tr>
+        <tr><td class="wide"><strong>Can I add or remove channels from the bot?</strong></td><td class="wide">Yes — <code>/add</code>, <code>/remove</code>, <code>/pause</code>, <code>/resume</code>, <code>/tag</code>, <code>/untag</code>.</td></tr>
+        <tr><td class="wide"><strong>Does the bot summarise with AI?</strong></td><td class="wide">No. It embeds a prompt into the JSON; you paste the file into whatever AI you like.</td></tr>
+        <tr><td class="wide"><strong>How many runs can I do a day?</strong></td><td class="wide">12 total, at least 5 minutes apart, one at a time, 30-minute timeout.</td></tr>
+        <tr><td class="wide"><strong>Where are the digests?</strong></td><td class="wide">In the output folder on the machine running the bot. <code>/files</code> lists them; <code>/last</code> resends the newest.</td></tr>
+      </tbody>
+    </table>
+    </div></div>
+
+  </div><!-- /main -->
+</div><!-- /wrap -->
+
+<footer>
+  tg-digest control bot — command guide. The bot is owner-only, the scraper is read-only, and no AI service is ever contacted.
+</footer>
+
+<script>
+(function () {
+  var toc = document.getElementById('toc');
+  var links = toc.querySelectorAll('a');
+  var sections = [];
+  links.forEach(function (link) {
+    var id = link.getAttribute('href').slice(1);
+    var el = document.getElementById(id);
+    if (el) sections.push({ id: id, el: el, link: link });
+  });
+  var observer = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (!entry.isIntersecting) return;
+      links.forEach(function (l) { l.classList.remove('active'); });
+      var match = sections.find(function (s) { return s.el === entry.target; });
+      if (match) {
+        match.link.classList.add('active');
+        if (window.innerWidth <= 1000) {
+          match.link.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        }
+      }
+    });
+  }, { rootMargin: '-10% 0px -80% 0px' });
+  sections.forEach(function (s) { observer.observe(s.el); });
+  links.forEach(function (link) {
+    link.addEventListener('click', function (e) {
+      e.preventDefault();
+      var id = link.getAttribute('href').slice(1);
+      var el = document.getElementById(id);
+      if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); history.replaceState(null, '', '#' + id); }
+    });
+  });
+})();
+
+function toggleTheme() {
+  var root = document.documentElement;
+  root.setAttribute('data-theme', root.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
+}
+</script>
+</body>
+</html>
