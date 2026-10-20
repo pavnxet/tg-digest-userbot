@@ -57,6 +57,7 @@ from formatter import (
     to_jsonl,
     to_txt,
 )
+from logging_setup import set_run_id as set_log_run_id
 from logging_setup import setup_logging
 from prompts import PromptError, available_names, default_prompt, load_prompt
 from scraper import ScrapeOptions, count_channel, scrape_channel
@@ -383,6 +384,7 @@ async def run(args: argparse.Namespace) -> int:
         if run_id is None:
             run_id = datetime.now(tz).strftime("%Y%m%d_%H%M%S")
             state_mod.set_run_id(CACHE_DIR, run_id)
+        set_log_run_id(run_id)  # every log line from here on carries this run id
         checkpoint = Checkpoint(CACHE_DIR / f"{run_id}.jsonl")
         done = checkpoint.load_done() if args.resume else {}
 

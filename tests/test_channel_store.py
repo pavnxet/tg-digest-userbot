@@ -1,7 +1,5 @@
 """Section B: channels.txt syntax, file-safe editing, and main.py paused handling."""
-import asyncio
 from datetime import datetime, timezone
-from pathlib import Path
 
 import pytest
 

@@ -6,10 +6,17 @@ that reads the environment, and it never hardcodes secrets.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+# Format checks, so a truncated hash or a typo'd token fails immediately with a
+# message that points at the right .env line instead of a cryptic Telethon error.
+_API_HASH_RE = re.compile(r"^[0-9a-fA-F]{32}$")
+_PHONE_RE = re.compile(r"^\+?[1-9]\d{6,14}$")
+_BOT_TOKEN_RE = re.compile(r"^\d{6,}:[A-Za-z0-9_-]{30,}$")
 
 # --------------------------------------------------------------------------
 # Paths (all relative to the repository root, i.e. this file's directory)
@@ -109,6 +116,17 @@ def load_credentials(env_path: Path = ENV_PATH) -> Credentials:
     except ValueError as exc:  # pragma: no cover - trivial guard
         raise RuntimeError("API_ID must be an integer (e.g. 1234567).") from exc
 
+    if not _API_HASH_RE.match(api_hash):
+        raise RuntimeError(
+            f"API_HASH in {env_path} must be 32 hex characters. Copy it exactly from "
+            "my.telegram.org → API development tools (see .env.example)."
+        )
+    if phone and not _PHONE_RE.match(phone):
+        raise RuntimeError(
+            f"PHONE in {env_path} must be in E.164 form, e.g. +919812345678 (see .env.example). "
+            "Leave it blank if you log in with a QR code."
+        )
+
     return Credentials(api_id=api_id, api_hash=api_hash, phone=phone)
 
 
@@ -157,6 +175,16 @@ def load_bot_settings(env_path: Path = ENV_PATH) -> BotSettings:
         api_id = int(raw_id)
     except ValueError as exc:
         raise RuntimeError("API_ID must be an integer (e.g. 1234567).") from exc
+
+    if not _API_HASH_RE.match(api_hash):
+        raise RuntimeError(
+            f"API_HASH in {env_path} must be 32 hex characters (see .env.example)."
+        )
+    if not _BOT_TOKEN_RE.match(bot_token):
+        raise RuntimeError(
+            f"BOT_TOKEN in {env_path} looks wrong (see .env.example). "
+            "Get a fresh one from @BotFather with /token."
+        )
 
     owner_id = None
     if raw_owner:

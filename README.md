@@ -1,9 +1,10 @@
 # tg-digest-userbot
 
 [![Docs](https://img.shields.io/badge/docs-GitHub_Pages-d97757?logo=github&logoColor=white)](https://pavnxet.github.io/tg-digest-userbot/)
+[![CI](https://github.com/pavnxet/tg-digest-userbot/actions/workflows/ci.yml/badge.svg)](https://github.com/pavnxet/tg-digest-userbot/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Telethon](https://img.shields.io/badge/telethon-1.45-2CA5E0)](https://github.com/LonamiWebs/Telethon)
-[![Tests](https://img.shields.io/badge/tests-527_passing-5f7a4f)](https://pavnxet.github.io/tg-digest-userbot/)
+[![Tests](https://img.shields.io/badge/tests-530_passing-5f7a4f)](https://pavnxet.github.io/tg-digest-userbot/)
 [![User client](https://img.shields.io/badge/user_client-read--only-1f1e1d)](https://pavnxet.github.io/tg-digest-userbot/#s13)
 
 > **📖 New here?** The **[full command guide](https://pavnxet.github.io/tg-digest-userbot/)** walks through
@@ -421,6 +422,39 @@ for both Latin text (chars/4) and Devanagari (chars/1.5).
 ---
 
 ## 7. How it works (architecture)
+
+```mermaid
+flowchart TD
+    You([You in Telegram]) --> handlers
+
+    subgraph Bot["bot.py — owner-only control bot"]
+        direction TB
+        handlers[bot_handlers.py] --> chans[bot_channels.py]
+        handlers --> run[bot_run.py]
+        handlers --> sched[bot_schedule.py]
+        handlers --> prompts[bot_prompts.py]
+        handlers --> files[bot_files.py]
+        handlers --> health[bot_health.py]
+        run --> rm[run_manager.py]
+    end
+
+    rm -->|"subprocess: argv list, no shell"| cfg
+
+    subgraph Main["main.py — read-only scraper"]
+        direction TB
+        cfg[config.py] --> client[client.py]
+        client --> ch[channels.py]
+        ch --> scraper[scraper.py]
+        scraper --> fmt[formatter.py]
+        fmt --> split[splitter.py]
+    end
+
+    split --> Out[(output/digest_*.json)]
+    Out -.->|you paste it| AI([Any AI chat])
+```
+
+The bot never scrapes: it starts `main.py` as a separate process and reports back.
+The user client is touched only by `user_session.py`, and never sends or reacts.
 
 | Module | Responsibility |
 |---|---|

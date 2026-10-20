@@ -268,8 +268,12 @@ def test_since_last_run_future_falls_back_to_24h(project, fake_client, monkeypat
     import json as _json
 
     ch = make_channel(1234567890, "News", username="news")
-    fake_client.add_channel(ch, history(5))
-    future = (datetime.now(timezone.utc) + timedelta(days=5)).isoformat()
+    # Messages relative to *now*: the fallback window is "the last 24 hours", so
+    # the fixed BASE that history() uses would age out of it.
+    now = datetime.now(timezone.utc)
+    recent = [make_message(5 - i, now - timedelta(minutes=i), text=f"msg {5 - i}") for i in range(5)]
+    fake_client.add_channel(ch, recent)
+    future = (now + timedelta(days=5)).isoformat()
     project["state"].write_text(_json.dumps({"last_run_utc": future}), encoding="utf-8")
     rc = run_main(monkeypatch, project, fake_client, ["--since-last-run"], "@news\n")
     assert rc == 0

@@ -1,0 +1,36 @@
+# systemd unit for the control bot (Linux laptop / small VPS).
+#
+#   sudo cp deploy/systemd/tg-digest-bot.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now tg-digest-bot
+#   journalctl -u tg-digest-bot -f
+#
+# Edit User= and WorkingDirectory= to match your setup. The bot must run as the
+# user that owns .env and the session file.
+
+[Unit]
+Description=tg-digest control bot
+Documentation=https://pavnxet.github.io/tg-digest-userbot/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/home/%i/tg-digest-userbot
+ExecStart=/usr/bin/env python3 /home/%i/tg-digest-userbot/bot.py
+
+# Restart forever, but back off so a bad .env does not spin the CPU.
+Restart=always
+RestartSec=10
+
+# Logs go to logs/bot.log as well; keep them out of the journal noise if you like.
+StandardOutput=journal
+StandardError=journal
+
+# Light hardening — the bot only needs its own directory.
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

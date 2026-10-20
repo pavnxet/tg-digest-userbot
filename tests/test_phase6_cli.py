@@ -14,6 +14,9 @@ from timeutil import get_tz
 ROOT = Path(__file__).resolve().parent.parent
 IST = get_tz()
 
+HASH = "0123456789abcdef0123456789abcdef"              # 32 hex chars
+TOKEN = "123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+
 
 def _now_message(msg_id=1, text="x"):
     return make_message(msg_id, datetime.now(timezone.utc), text=text)
@@ -63,10 +66,26 @@ def test_missing_env_gives_friendly_error(tmp_path):
 def test_phone_is_optional_after_qr_login(tmp_path):
     # The QR-login .env has no PHONE; loading credentials must still succeed.
     env = tmp_path / ".env"
-    env.write_text("API_ID=1\nAPI_HASH=h\nBOT_TOKEN=t\nOWNER_ID=1\n", encoding="utf-8")
+    env.write_text(f"API_ID=1\nAPI_HASH={HASH}\nBOT_TOKEN={TOKEN}\nOWNER_ID=1\n", encoding="utf-8")
     credentials = config.load_credentials(env)
-    assert credentials.api_id == 1 and credentials.api_hash == "h"
+    assert credentials.api_id == 1 and credentials.api_hash == HASH
     assert credentials.phone == ""
+
+
+def test_bad_api_hash_is_rejected(tmp_path):
+    env = tmp_path / ".env"
+    env.write_text("API_ID=1\nAPI_HASH=too-short\n", encoding="utf-8")
+    with pytest.raises(RuntimeError) as exc:
+        config.load_credentials(env)
+    assert "API_HASH" in str(exc.value)
+
+
+def test_bad_phone_is_rejected(tmp_path):
+    env = tmp_path / ".env"
+    env.write_text(f"API_ID=1\nAPI_HASH={HASH}\nPHONE=123\n", encoding="utf-8")
+    with pytest.raises(RuntimeError) as exc:
+        config.load_credentials(env)
+    assert "PHONE" in str(exc.value)
 
 
 def test_login_without_phone_lets_telethon_prompt():
@@ -139,7 +158,7 @@ def test_not_logged_in_returns_2_and_never_calls_start(monkeypatch, project, cap
 
 def test_non_integer_api_id_errors(tmp_path):
     env = tmp_path / ".env"
-    env.write_text("API_ID=abc\nAPI_HASH=h\nPHONE=+1\n", encoding="utf-8")
+    env.write_text(f"API_ID=abc\nAPI_HASH={HASH}\nPHONE=+919812345678\n", encoding="utf-8")
     with pytest.raises(RuntimeError):
         config.load_credentials(env)
 

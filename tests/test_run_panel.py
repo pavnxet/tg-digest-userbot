@@ -1,6 +1,5 @@
 """Section C: /run /stop /preview /last via a fake main.py subprocess."""
 import asyncio
-import json
 
 from fake_bot_client import FakeEvent, build_app
 

@@ -10,7 +10,7 @@ for path in (str(ROOT), str(TESTS_DIR)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from fake_client import FakeTelegramClient  # noqa: E402
+from fake_client import FakeTelegramClient
 
 
 @pytest.fixture

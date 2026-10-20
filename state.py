@@ -1,12 +1,33 @@
 """Small JSON state helpers: last-run timestamp and the resume run id."""
 from __future__ import annotations
 
+import contextlib
 import json
+import os
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
 from timeutil import get_tz
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Write a temp file in the same folder, then os.replace it into place.
+
+    A crash mid-write can never leave a half-written state.json behind.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle_fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=path.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(handle_fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        os.replace(tmp_name, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_name)
+        raise
 
 
 def load_state(path: Path) -> dict[str, Any]:
@@ -21,8 +42,8 @@ def load_state(path: Path) -> dict[str, Any]:
 
 
 def save_state(path: Path, data: dict[str, Any]) -> None:
-    """Write state.json atomically-ish (small file, plain write is fine)."""
-    Path(path).write_text(json.dumps(data, indent=2), encoding="utf-8")
+    """Write state.json atomically."""
+    _atomic_write_text(Path(path), json.dumps(data, indent=2))
 
 
 def get_last_run(path: Path) -> Optional[datetime]:
@@ -61,5 +82,4 @@ def get_run_id(cache_dir: Path) -> Optional[str]:
 
 
 def set_run_id(cache_dir: Path, run_id: str) -> None:
-    Path(cache_dir).mkdir(parents=True, exist_ok=True)
-    (Path(cache_dir) / "last_run_id.txt").write_text(run_id, encoding="utf-8")
+    _atomic_write_text(Path(cache_dir) / "last_run_id.txt", run_id)
