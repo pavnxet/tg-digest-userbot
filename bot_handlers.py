@@ -539,8 +539,9 @@ class BotApp:
                 event.chat_id, image, caption=caption, force_document=False,
             )
             self.manager.state.qr_message_id = getattr(message, "id", None)
-        except Exception:  # noqa: BLE001
-            self.log.warning("could not send the QR image")
+        except Exception as exc:  # noqa: BLE001 - never fail the login flow here
+            # Include the reason: a missing dependency (e.g. Pillow) shows up here.
+            self.log.warning("could not send the QR image: %s: %s", type(exc).__name__, exc)
         await self._respond(event, "या यह link खोलें / or open this link:\n" + qr.url)
 
     async def _qr_wait(self, event: Any) -> None:

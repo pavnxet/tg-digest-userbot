@@ -1,6 +1,9 @@
+# Runtime dependencies — kept in sync with [project].dependencies in pyproject.toml.
 telethon>=1.34,<2
 python-dotenv>=1.0
-rich>=13.0
 tqdm>=4.66
 qrcode>=7.4
+pillow>=10.0          # qrcode.make() renders the login QR through Pillow
+
+# Test tooling (also available as the "dev" extra in pyproject.toml).
 pytest>=7.4
