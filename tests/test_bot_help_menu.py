@@ -23,8 +23,11 @@ def test_help_mentions_every_command_group():
 
 
 def test_help_documents_the_full_history_window():
-    assert "all" in HELP_TEXT
-    assert "पूरी history" in HELP_TEXT
+    from bot_help import guide_for
+
+    assert "/history" in HELP_TEXT
+    assert "all" in guide_for("run")            # the `all` window lives in the guide
+    assert "entire history" in guide_for("history")
 
 
 def test_command_menu_matches_registered_commands():

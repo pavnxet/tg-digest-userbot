@@ -31,6 +31,10 @@ from telethon.errors import (
 )
 from telethon.tl.custom import Button
 
+# Help text and the per-command guides live in bot_help.py, formatted for
+# Telegram's HTML parse mode. Re-exported here so the panels and tests keep
+# importing them from this module.
+from bot_help import COMMAND_GUIDES, GUIDE_COMMANDS, HELP_TEXT, guide_for
 from login_state import (
     MAX_CODE_ATTEMPTS,
     MAX_PASSWORD_ATTEMPTS,
@@ -57,39 +61,6 @@ SEND_CODE_PER_HOUR = 3
 _NON_DIGITS = re.compile(r"[^0-9]")
 _NON_PHONE = re.compile(r"[^0-9+]")
 _PHONE_RE = re.compile(r"^\+?[1-9]\d{6,14}$")
-
-HELP_TEXT = (
-    "🤖 tg-digest control panel\n\n"
-    "Account\n"
-    "/login — QR login (scan from another device)\n"
-    "/login_phone — phone + code login\n"
-    "/status — login status\n"
-    "/logout — log out\n"
-    "/cancel — cancel a login\n\n"
-    "Channels\n"
-    "/channels [tag] — list channels\n"
-    "/add <link|@name|id> [| label]\n"
-    "/remove <#> · /pause <#> · /resume <#>\n"
-    "/tag <#> <tag> · /untag <#> <tag>\n"
-    "/groups — tag groups\n\n"
-    "Runs\n"
-    "/run <window> [group:<tag>] [channel:<n>] [dedupe] [min:<N>] [views] [send:no] [resume]\n"
-    "/history <#|@name|link> [dedupe] [min:<N>] [views] [send:yes] — पूरी history (लंबा चलता है)\n"
-    "/stop · /preview <window> · /last\n"
-    "window: today | yesterday | 6h | 24h | 3d | since-last | all | <YYYY-MM-DD HH:MM> x2\n\n"
-    "Schedules (IST, max 5)\n"
-    "/schedule add <HH:MM> <window> [group:<tag>]\n"
-    "/schedule list | remove <n> | pause <n> | resume <n>\n\n"
-    "Settings & files\n"
-    "/settings · /set <key> <value>\n"
-    "/files · /clean · /find <keyword> [6h|24h|3d]\n\n"
-    "Prompts\n"
-    "/prompts — list prompts · /prompt <name> — show one\n"
-    "/set summary_prompt <name> — choose the embedded prompt\n\n"
-    "Health\n"
-    "/health · /panic\n\n"
-    "2FA password के लिए terminal login सबसे सुरक्षित है।"
-)
 
 # The bot's command menu (Telegram shows this next to the input box).
 # Telegram limits: name 1-32 chars, no leading slash; description 3-256 chars.
@@ -228,6 +199,14 @@ class BotApp:
             await self._respond(event, "पिछला login timeout हो गया। / login timed out. /login फिर से करें।")
 
         if command in self.commands:
+            # A command that needs arguments, sent bare (which is what tapping it
+            # in the Telegram menu does), shows its full guide instead of a
+            # terse usage line.
+            bare = not text.partition(" ")[2].strip()
+            name = command.lstrip("/")
+            if bare and name in GUIDE_COMMANDS:
+                await self._respond(event, COMMAND_GUIDES[name], parse_mode="html")
+                return
             await self.commands[command](event)
             return
 
@@ -305,7 +284,19 @@ class BotApp:
 
     # -------------------------------------------------------------- commands
     async def cmd_start(self, event: Any) -> None:
-        await self._respond(event, HELP_TEXT)
+        arg = (getattr(event, "text", "") or "").partition(" ")[2].strip()
+        await self._send_help(event, arg)
+
+    async def _send_help(self, event: Any, arg: str) -> None:
+        """The command list, or one command's full guide (/help <command>)."""
+        if not arg:
+            await self._respond(event, HELP_TEXT, parse_mode="html")
+            return
+        guide = guide_for(arg)
+        if guide is None:
+            await self._respond(event, f"«{arg}» नाम का कोई command नहीं है। /help देखें।")
+            return
+        await self._respond(event, guide, parse_mode="html")
 
     async def cmd_login(self, event: Any) -> None:
         """QR login (default)."""
@@ -657,11 +648,12 @@ class BotApp:
                                        "delete करें। / Please delete it manually.")
         return text
 
-    async def _respond(self, event: Any, text: str, buttons: Any = None) -> None:
+    async def _respond(self, event: Any, text: str, buttons: Any = None,
+                       parse_mode: Any = None) -> None:
         try:
             if buttons is not None:
-                await event.respond(text, buttons=buttons)
+                await event.respond(text, buttons=buttons, parse_mode=parse_mode)
             else:
-                await event.respond(text)
+                await event.respond(text, parse_mode=parse_mode)
         except Exception:  # noqa: BLE001
             self.log.warning("could not send a bot reply")

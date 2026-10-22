@@ -258,10 +258,12 @@ class FakeEvent:
         self.is_private = is_private
         self.message = SimpleNamespace(id=message_id)
         self.replies: list[tuple] = []
+        self.parse_modes: list = []
         self.deleted = False
 
-    async def respond(self, text, buttons=None, **kwargs):
+    async def respond(self, text, buttons=None, parse_mode=None, **kwargs):
         self.replies.append((text, buttons))
+        self.parse_modes.append(parse_mode)
         return await self.bot.send_message(self.chat_id, text, buttons=buttons)
 
     async def delete(self):
@@ -285,7 +287,7 @@ class FakeCallbackEvent:
     async def answer(self, *args, **kwargs):
         self.answered = True
 
-    async def respond(self, text, buttons=None, **kwargs):
+    async def respond(self, text, buttons=None, parse_mode=None, **kwargs):
         self.replies.append((text, buttons))
         return await self.bot.send_message(self.chat_id, text, buttons=buttons)
 

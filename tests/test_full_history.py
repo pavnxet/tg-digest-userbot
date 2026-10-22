@@ -225,11 +225,13 @@ def test_history_rejects_channel_filters(tmp_path):
     assert "group:/channel:" in bot.all_text()
 
 
-def test_history_without_arguments_shows_usage(tmp_path):
+def test_history_without_arguments_shows_the_guide(tmp_path):
     app, bot, calls = _panel(tmp_path, "@news | News\n")
-    asyncio.run(app.handle(FakeEvent(bot, "/history", OWNER)))
+    event = FakeEvent(bot, "/history", OWNER)
+    asyncio.run(app.handle(event))
     assert not calls
-    assert "/history <#|@name|link>" in bot.all_text()
+    assert "Usage" in bot.all_text()
+    assert event.parse_modes[-1] == "html"
 
 
 def test_history_is_owner_only(tmp_path):
