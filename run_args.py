@@ -67,7 +67,7 @@ def _force_no_message_cap(argv: list[str]) -> None:
     settings-derived flags would otherwise re-impose it.
     """
     for i, token in enumerate(argv):
-        if token == "--max-per-channel" and i + 1 < len(argv):
+        if token == "--max-per-channel" and i + 1 < len(argv):  # nosec B105 - an argv flag, not a secret
             argv[i + 1] = "0"
 
 
