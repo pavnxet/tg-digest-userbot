@@ -239,3 +239,34 @@ def test_history_is_owner_only(tmp_path):
     asyncio.run(app.handle(FakeEvent(bot, "/history News", OWNER + 1)))
     assert not calls
     assert not bot.sent, "a non-owner must get no reply at all"
+
+
+# --------------------------------------------------------------------------
+# The progress line must count the run's subset, not the whole channels.txt
+# --------------------------------------------------------------------------
+def test_history_progress_counts_only_the_one_channel(tmp_path):
+    app, bot, _calls = _panel(tmp_path, "@news | News\n@jobs | Jobs\n@a | A\n@b | B\n")
+    asyncio.run(app.handle(FakeEvent(bot, "/history 2", OWNER)))
+    assert app._run_panel._total_channels() == 1
+
+
+def test_group_run_progress_counts_only_the_group(tmp_path):
+    app, bot, _calls = _panel(
+        tmp_path, "@a | A | tags=news\n@b | B | tags=news\n@c | C | tags=jobs\n",
+    )
+    asyncio.run(app.handle(FakeEvent(bot, "/run today group:news", OWNER)))
+    assert app._run_panel._total_channels() == 2
+
+
+def test_progress_falls_back_to_the_whole_list(tmp_path):
+    app, bot, _calls = _panel(tmp_path, "@a | A\n@b | B\n")
+    asyncio.run(app.handle(FakeEvent(bot, "/run today", OWNER)))
+    assert app._run_panel._total_channels() == 2
+
+
+def test_channels_file_arg_helper():
+    from bot_run import _channels_file_arg
+
+    assert _channels_file_arg(["--all-history", "--channels-file", "/tmp/x.txt"]) == "/tmp/x.txt"
+    assert _channels_file_arg(["--today"]) is None
+    assert _channels_file_arg(["--channels-file"]) is None

@@ -25,6 +25,15 @@ MAX_AUTO_SEND_PARTS = 10
 _COUNT_RE = re.compile(r"OK\s+(.+?)\s+\(~(\d+)\s+message")
 
 
+def _channels_file_arg(argv: list[str]) -> Optional[str]:
+    """The --channels-file value in an argv list, if it has one."""
+    if "--channels-file" in argv:
+        index = argv.index("--channels-file")
+        if index + 1 < len(argv):
+            return argv[index + 1]
+    return None
+
+
 class RunPanel:
     """Adds /run /stop /preview /last to the bot."""
 
@@ -39,6 +48,7 @@ class RunPanel:
         self._last_outputs: list[Path] = []
         self._autodelete_task: Optional[asyncio.Task] = None
         self._last_all_history = False
+        self._run_channels_file: Optional[str] = None
         app.commands.update({
             "/run": self.cmd_run,
             "/history": self.cmd_history,
@@ -67,6 +77,19 @@ class RunPanel:
         return str(path), None
 
     def _total_channels(self) -> int:
+        # Prefer the subset this run actually uses. Without this the progress line
+        # reports the size of the whole channels.txt (e.g. "channel 0/4") even
+        # when the run is a single channel or one group.
+        path = self._run_channels_file
+        if path:
+            try:
+                from channels import parse_channels_file
+
+                active = [s for s in parse_channels_file(Path(path)) if not s.paused]
+                if active:
+                    return len(active)
+            except OSError:
+                pass
         store = getattr(self.app, "channels_store", None)
         return 0 if store is None else len([e for e in store.entries() if not e.paused])
 
@@ -92,6 +115,7 @@ class RunPanel:
         """Spawn main.py with a validated argv. Returns an error message or None."""
         if timeout is None and "--all-history" in argv:
             timeout = HISTORY_TIMEOUT_SECONDS     # a full history needs far longer
+        self._run_channels_file = _channels_file_arg(argv)
         refusal = await self.rm.start(argv, timeout=timeout)
         if refusal is not None:
             return f"❌ {refusal.reason}"
