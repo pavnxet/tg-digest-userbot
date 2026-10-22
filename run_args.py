@@ -10,7 +10,7 @@ from typing import Callable, Optional
 
 from timeutil import get_tz, parse_local_datetime
 
-WINDOW_TOKENS = ("today", "yesterday", "6h", "24h", "3d", "since-last")
+WINDOW_TOKENS = ("today", "yesterday", "6h", "24h", "3d", "since-last", "all")
 DURATIONS = ("6h", "24h", "3d")
 _DT = re.compile(r"^\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\s+(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\s*(.*)$")
 
@@ -45,7 +45,9 @@ def parse_window(text: str, tz=None) -> tuple[list[str], str]:
         return ["--last", token], rest
     if token == "since-last":  # nosec B105 - window keyword
         return ["--since-last-run"], rest
-    raise ArgError("window: today | yesterday | 6h | 24h | 3d | since-last | <YYYY-MM-DD HH:MM> x2")
+    if token == "all":  # nosec B105 - window keyword (the channel's full history)
+        return ["--all-history"], rest
+    raise ArgError("window: today | yesterday | 6h | 24h | 3d | since-last | all | <YYYY-MM-DD HH:MM> x2")
 
 
 def _int(value: str, lo: int, hi: int, name: str) -> int:
@@ -56,6 +58,17 @@ def _int(value: str, lo: int, hi: int, name: str) -> int:
     if not (lo <= number <= hi):
         raise ArgError(f"{name}: {lo}-{hi} के बीच होना चाहिए।")
     return number
+
+
+def _force_no_message_cap(argv: list[str]) -> None:
+    """Replace the settings' --max-per-channel value with 0 (no cap).
+
+    A full-history run must not stop at the default 5000-message cap, and the
+    settings-derived flags would otherwise re-impose it.
+    """
+    for i, token in enumerate(argv):
+        if token == "--max-per-channel" and i + 1 < len(argv):
+            argv[i + 1] = "0"
 
 
 def build_argv(
@@ -72,12 +85,19 @@ def build_argv(
 
     argv: list[str] = list(window)
     argv += settings.as_run_flags()          # defaults first, so explicit options win
-    send_files = True
+    all_history = "--all-history" in argv
+    if all_history:
+        _force_no_message_cap(argv)
+    # A full history can be enormous, so it is not sent to the chat unless the
+    # owner explicitly asks for it with `send:yes`.
+    send_files = not all_history
 
     for token in rest.split():
         low = token.lower()
         if low == "dedupe":
             argv.append("--dedupe")
+        elif low == "resume":
+            argv.append("--resume")          # continue a run that was stopped midway
         elif low == "views":
             argv.append("--with-views")
         elif low.startswith("min:"):

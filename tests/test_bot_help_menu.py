@@ -10,16 +10,21 @@ OWNER = 555
 REGISTERED = {
     "start", "help", "login", "login_phone", "status", "logout", "cancel",
     "channels", "add", "remove", "pause", "resume", "tag", "untag", "groups",
-    "run", "stop", "preview", "last", "schedule", "settings", "set",
+    "run", "history", "stop", "preview", "last", "schedule", "settings", "set",
     "prompts", "prompt",
     "files", "clean", "find", "health", "panic",
 }
 
 
 def test_help_mentions_every_command_group():
-    for token in ["/channels", "/add", "/run", "/stop", "/schedule", "/settings",
+    for token in ["/channels", "/add", "/run", "/history", "/stop", "/schedule", "/settings",
                   "/prompts", "/prompt", "/files", "/health", "/panic"]:
         assert token in HELP_TEXT, f"{token} missing from HELP_TEXT"
+
+
+def test_help_documents_the_full_history_window():
+    assert "all" in HELP_TEXT
+    assert "पूरी history" in HELP_TEXT
 
 
 def test_command_menu_matches_registered_commands():

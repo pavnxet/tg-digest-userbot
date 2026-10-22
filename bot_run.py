@@ -15,6 +15,7 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
+from config import HISTORY_TIMEOUT_SECONDS
 from run_args import ArgError, build_argv
 
 _log = logging.getLogger("tgdigest.bot.runpanel")
@@ -37,8 +38,10 @@ class RunPanel:
         self._status_id: Optional[int] = None
         self._last_outputs: list[Path] = []
         self._autodelete_task: Optional[asyncio.Task] = None
+        self._last_all_history = False
         app.commands.update({
             "/run": self.cmd_run,
+            "/history": self.cmd_history,
             "/stop": self.cmd_stop,
             "/preview": self.cmd_preview,
             "/last": self.cmd_last,
@@ -75,18 +78,81 @@ class RunPanel:
         except OSError:
             return 0
 
-    # -- shared entry point (used by /run and the scheduler) ---------------
+    # -- shared entry point (used by /run, /history and the scheduler) -----
     async def start_run(self, text: str, chat_id: Any) -> Optional[str]:
         """Start a run. Returns an error message, or None on success."""
         try:
             argv, send_files = build_argv(text, self.settings, subset_writer=self._subset)
         except ArgError as exc:
             return f"❌ {exc}"
-        refusal = await self.rm.start(argv)
+        return await self._start(argv, send_files, chat_id)
+
+    async def _start(self, argv: list[str], send_files: bool, chat_id: Any,
+                     timeout: Optional[int] = None) -> Optional[str]:
+        """Spawn main.py with a validated argv. Returns an error message or None."""
+        if timeout is None and "--all-history" in argv:
+            timeout = HISTORY_TIMEOUT_SECONDS     # a full history needs far longer
+        refusal = await self.rm.start(argv, timeout=timeout)
         if refusal is not None:
             return f"❌ {refusal.reason}"
+        self._last_all_history = "--all-history" in argv
         self._task = asyncio.create_task(self._supervise(chat_id, send_files))
         return None
+
+    # -- full history ------------------------------------------------------
+    def _history_subset(self, target: str) -> tuple[Optional[str], Optional[str]]:
+        """Write a one-line channels file for a single channel (#, @name or link)."""
+        store = getattr(self.app, "channels_store", None)
+        if store is None:
+            return None, "channels store उपलब्ध नहीं।"
+        matches = store.find(target)
+        if not matches:
+            return None, f"{target}: कोई चैनल नहीं मिला। /channels से नंबर देखें।"
+        if len(matches) > 1:
+            numbers = ", ".join(str(e.index) for e in matches[:8])
+            return None, f"{target} कई चैनलों से मिलता है ({numbers})। नंबर दें: /history <#>"
+        path = self.cache_dir / "history_channel.txt"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(matches[0].raw + "\n", encoding="utf-8")
+        return str(path), None
+
+    async def cmd_history(self, event: Any) -> None:
+        if self.rm.running:
+            await self.app._respond(event, "एक run पहले से चल रहा है। /stop से रोकें।")
+            return
+        text = self._arg(event)
+        if not text:
+            await self.app._respond(
+                event,
+                "उपयोग: /history <#|@name|link> [dedupe] [min:<N>] [views] [send:yes]\n"
+                "एक चैनल की पूरी history scrape करता है (फ़ाइल तभी भेजी जाती है जब send:yes दें)।",
+            )
+            return
+        target, _, extra = text.partition(" ")
+        extra = extra.strip()
+        for token in extra.split():
+            if token.lower().startswith(("group:", "channel:")):
+                await self.app._respond(
+                    event, "❌ /history में group:/channel: की ज़रूरत नहीं — चैनल सीधे दें।",
+                )
+                return
+        path, error = self._history_subset(target)
+        if error or path is None:
+            await self.app._respond(event, f"❌ {error or 'चैनल नहीं मिला।'}")
+            return
+        try:
+            argv, send_files = build_argv(f"all {extra}".strip(), self.settings)
+        except ArgError as exc:
+            await self.app._respond(event, f"❌ {exc}")
+            return
+        argv += ["--channels-file", path]
+        await self.app._respond(
+            event,
+            "📜 पूरी history scrape हो रही है — इसमें लंबा समय लग सकता है। /stop से रोक सकते हैं।",
+        )
+        error = await self._start(argv, send_files, event.chat_id)
+        if error:
+            await self.app._respond(event, error)
 
     # -- commands ----------------------------------------------------------
     async def cmd_run(self, event: Any) -> None:
@@ -95,7 +161,8 @@ class RunPanel:
             return
         text = self._arg(event)
         if not text:
-            await self.app._respond(event, "उपयोग: /run <window> [group:<tag>] [channel:<n>] [dedupe] [min:<N>] [views] [send:no]")
+            await self.app._respond(event, "उपयोग: /run <window> [group:<tag>] [channel:<n>] [dedupe] [min:<N>] [views] [send:no] [resume]\n"
+                                           "window: today | yesterday | 6h | 24h | 3d | since-last | all | <YYYY-MM-DD HH:MM> x2")
             return
         error = await self.start_run(text, event.chat_id)
         if error:
@@ -150,6 +217,12 @@ class RunPanel:
             except (OSError, ValueError):
                 pass
             lines.append(f"files: {len(self._last_outputs)}")
+        if self._last_all_history and result.result in ("timeout", "failed", "stopped"):
+            lines.append(
+                "यह लंबा run पूरा नहीं हुआ। जहाँ तक पढ़ा गया वह checkpoint में सुरक्षित है — "
+                "जारी रखने के लिए वही command दोबारा भेजें और अंत में `resume` जोड़ें "
+                "(जैसे /history <#> resume)।"
+            )
         return "\n".join(lines)
 
     async def _send_outputs(self, chat_id: Any) -> None:

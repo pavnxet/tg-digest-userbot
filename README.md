@@ -210,7 +210,8 @@ the line (the scraper skips it and reports it as `paused`).
 ### Running
 | Command | What it does |
 |---|---|
-| `/run <window> [group:<tag>] [channel:<n>] [dedupe] [min:<N>] [views] [send:no]` | Run the scraper. Window: `today`, `yesterday`, `6h`, `24h`, `3d`, `since-last`, or `YYYY-MM-DD HH:MM YYYY-MM-DD HH:MM` (IST). |
+| `/run <window> [group:<tag>] [channel:<n>] [dedupe] [min:<N>] [views] [send:no] [resume]` | Run the scraper. Window: `today`, `yesterday`, `6h`, `24h`, `3d`, `since-last`, `all`, or `YYYY-MM-DD HH:MM YYYY-MM-DD HH:MM` (IST). |
+| `/history <#\|@name\|link> [dedupe] [min:<N>] [views] [send:yes]` | Scrape one channel's **entire history**. Long-running; the file is not sent unless you add `send:yes`. |
 | `/stop` | Kill the whole run process tree. |
 | `/preview <window> [group:<tag>]` | Dry-run; shows message counts per channel. No file. |
 | `/last` | Resend the most recent digest. |
@@ -218,6 +219,27 @@ the line (the scraper skips it and reports it as `paused`).
 Limits (to protect the account): one run at a time, minimum 5 minutes between
 runs, maximum 12 runs per day (manual and scheduled share these), 30-minute hard
 timeout. Files are sent as documents; more than 10 parts asks first.
+
+#### Full history (`all` / `/history`)
+
+`/run all [group:<tag>] [channel:<n>]` — or the friendlier `/history 3`, which
+accepts a `/channels` number, an `@name` or a link — reads a channel from its
+**first message** to now:
+
+- the per-channel message cap is lifted (it would otherwise stop at 5,000);
+- the run gets a **2-hour** timeout instead of 30 minutes, and tolerates much
+  longer FloodWaits, because it can take a long time;
+- the digest is **not** sent to the chat unless you ask (`send:yes`), since a
+  full history can be very large;
+- progress and `/stop` work exactly as for a normal run;
+- if it is interrupted, what was read so far is kept in the checkpoint. Re-send
+  the same command with `resume` at the end to continue from where it stopped.
+
+From the command line:
+
+```bash
+python main.py --all-history --channels-file one_channel.txt
+```
 
 ### Schedules (IST, max 5)
 `/schedule add <HH:MM> <window> [group:<tag>]`, `/schedule list`,
@@ -346,6 +368,9 @@ python main.py --today --dry-run
 
 # One file per channel, plus view counts
 python main.py --last 24h --per-channel-files --with-views
+
+# One channel's ENTIRE history (no message cap; can take a long time)
+python main.py --all-history --channels-file one_channel.txt
 ```
 
 All time options are interpreted in **IST** (`Asia/Kolkata`) by default; change

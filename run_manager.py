@@ -179,6 +179,7 @@ class RunManager:
         self._started_at: Optional[float] = None
         self._timed_out = False
         self._stopped = False
+        self._run_timeout: int = self.timeout
 
     # -- state -------------------------------------------------------------
     @property
@@ -201,11 +202,13 @@ class RunManager:
         return None
 
     # -- lifecycle ---------------------------------------------------------
-    async def start(self, argv: list[str], capture: bool = False) -> "Refusal | None":
+    async def start(self, argv: list[str], capture: bool = False,
+                    timeout: Optional[int] = None) -> "Refusal | None":
         """Start a run. Returns None on success, or a Refusal with the reason.
 
         With ``capture=True`` the child's stdout/stderr are captured (used by
-        /preview to read the dry-run counts).
+        /preview to read the dry-run counts). ``timeout`` overrides the default
+        hard timeout for this run only (a full-history scrape gets much longer).
         """
         if self.running:
             return Refusal("एक run पहले से चल रहा है। /stop से रोकें।")
@@ -236,6 +239,7 @@ class RunManager:
         self._started_at = time.time()
         self._timed_out = False
         self._stopped = False
+        self._run_timeout = int(timeout) if timeout else self.timeout
         self._watchdog = asyncio.create_task(self._timeout_watch())
         self._log.info("run started (pid %s)", self._proc.pid)
         return None
@@ -284,13 +288,14 @@ class RunManager:
         return True
 
     async def _timeout_watch(self) -> None:
+        limit = self._run_timeout
         try:
-            await asyncio.sleep(self.timeout)
+            await asyncio.sleep(limit)
         except asyncio.CancelledError:
             return
         if self.running:
             self._timed_out = True
-            self._log.warning("run exceeded the %ss timeout; killing the process tree", self.timeout)
+            self._log.warning("run exceeded the %ss timeout; killing the process tree", limit)
             await self._kill_tree()
 
     async def _kill_tree(self) -> None:

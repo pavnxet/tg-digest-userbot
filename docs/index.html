@@ -522,7 +522,7 @@ footer {
     <span class="badge badge--accent">owner-only</span>
     <span class="badge">read-only scraper</span>
     <span class="badge">no AI calls</span>
-    <span class="badge">29 commands</span>
+    <span class="badge">30 commands</span>
   </div>
 </header>
 
@@ -629,6 +629,7 @@ OWNER_ID=...        <span class="c"># your numeric Telegram id (or leave blank)<
       <thead><tr><th>Command</th><th>What it does</th><th>Example</th></tr></thead>
       <tbody>
         <tr><td class="cmd">/run &lt;window&gt; [options]</td><td class="wide">Runs the scraper and sends you the digest. See <a href="#s6">section 6</a> for options.</td><td class="cmd">/run today</td></tr>
+        <tr><td class="cmd">/history &lt;#|@name|link&gt; [options]</td><td class="wide">Scrapes one channel's <strong>entire history</strong>. Long-running; no file unless you add <code>send:yes</code>.</td><td class="cmd">/history 3</td></tr>
         <tr><td class="cmd">/preview &lt;window&gt; [group:&lt;tag&gt;]</td><td class="wide">Dry run — shows how many messages each channel has. No file is written.</td><td class="cmd">/preview 24h</td></tr>
         <tr><td class="cmd">/stop</td><td class="wide">Kills the running scrape (the whole process tree).</td><td class="cmd">/stop</td></tr>
         <tr><td class="cmd">/last</td><td class="wide">Resends the most recent digest file(s).</td><td class="cmd">/last</td></tr>
@@ -709,6 +710,7 @@ https://t.me/somechannel | Some Channel
         <tr><td class="cmd">yesterday</td><td class="wide">The whole previous day (IST).</td></tr>
         <tr><td class="cmd">6h · 24h · 3d</td><td class="wide">The last N hours / days from now.</td></tr>
         <tr><td class="cmd">since-last</td><td class="wide">Everything since the last successful run.</td></tr>
+        <tr><td class="cmd">all</td><td class="wide">The channel's <strong>entire history</strong> — from its first message until now. See <a href="#s6-history">Full history</a> below.</td></tr>
         <tr><td class="cmd">&lt;YYYY-MM-DD HH:MM&gt; &lt;YYYY-MM-DD HH:MM&gt;</td><td class="wide">An explicit IST range: start and end.</td></tr>
       </tbody>
     </table>
@@ -724,6 +726,7 @@ https://t.me/somechannel | Some Channel
         <tr><td class="cmd">min:&lt;N&gt;</td><td class="wide">Skip messages shorter than N characters (0–500).</td></tr>
         <tr><td class="cmd">views</td><td class="wide">Include view counts.</td></tr>
         <tr><td class="cmd">send:no</td><td class="wide">Run but don't send me the file.</td></tr>
+        <tr><td class="cmd">resume</td><td class="wide">Continue a run that was stopped or timed out, from its checkpoint.</td></tr>
       </tbody>
     </table>
     </div></div>
@@ -739,9 +742,31 @@ https://t.me/somechannel | Some Channel
         <li>One run at a time.</li>
         <li>At least <strong>5 minutes</strong> between runs.</li>
         <li>At most <strong>12 runs per day</strong> (manual and scheduled share the limit).</li>
-        <li>A hard <strong>30-minute timeout</strong>, after which the process tree is killed.</li>
+        <li>A hard <strong>30-minute timeout</strong>, after which the process tree is killed (a full-history run gets <strong>2 hours</strong>).</li>
       </ul>
     </div>
+
+    <h3 id="s6-history">Full history of one channel</h3>
+    <p>To read a channel from its <strong>very first message</strong> to now, use the <code>all</code> window, or the friendlier shortcut <code>/history</code> — which accepts a <code>/channels</code> number, an <code>@name</code> or a link.</p>
+    <span class="code-block"><span class="c"># by the number shown in /channels</span>
+/history 3
+
+<span class="c"># by name or link, with options</span>
+/history @news dedupe min:40
+
+<span class="c"># same thing with the generic command</span>
+/run all channel:3</span>
+    <div class="callout callout--warn">
+      <div class="callout__t">Full history is a long job</div>
+      <ul>
+        <li>The per-channel message cap is <strong>lifted</strong> (it would otherwise stop at 5,000).</li>
+        <li>The timeout becomes <strong>2 hours</strong>, and long FloodWaits are tolerated — it can still take a long time.</li>
+        <li>The digest is <strong>not sent</strong> unless you add <code>send:yes</code>, because it can be very large.</li>
+        <li><code>/stop</code> and the live progress message work exactly as usual.</li>
+        <li>If it is interrupted, everything read so far is kept. Re-send the same command with <code>resume</code> to continue.</li>
+      </ul>
+    </div>
+    <p>From the command line, the equivalent is <code>python main.py --all-history --channels-file one_channel.txt</code>.</p>
     <p>While a run is going, the bot keeps <strong>one status message</strong> updated (at most every 10 seconds) showing the elapsed time and progress like <code>channel 3/12</code>. When it finishes you get a summary — channels ok, messages, skipped channels and reasons, truncated channels, estimated tokens — and the digest arrives as a document. If there are more than 10 parts it asks before sending.</p>
 
     <!-- ============ 7 ============ -->

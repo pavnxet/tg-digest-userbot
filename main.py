@@ -42,6 +42,7 @@ from config import (
     DEFAULT_MAX_PER_CHANNEL,
     DEFAULT_MIN_CHARS,
     DEFAULT_TIMEZONE,
+    HISTORY_MAX_FLOOD_WAIT,
     LOG_DIR,
     OUTPUT_DIR,
     SESSION_BASENAME,
@@ -192,13 +193,17 @@ def build_parser() -> argparse.ArgumentParser:
     window.add_argument("--since", metavar="'YYYY-MM-DD HH:MM'", help="range start (IST)")
     window.add_argument("--until", metavar="'YYYY-MM-DD HH:MM'", help="range end (IST)")
     window.add_argument("--since-last-run", action="store_true", help="since the last successful run")
+    window.add_argument("--all-history", action="store_true",
+                        help="the channel's entire history (no message cap; can take a long time)")
 
-    parser.add_argument("--max-per-channel", type=int, default=DEFAULT_MAX_PER_CHANNEL,
-                        help="safety cap of messages read per channel")
+    parser.add_argument("--max-per-channel", type=int, default=None,
+                        help="safety cap of messages read per channel (0 = no cap; "
+                             "defaults to 0 with --all-history, else 5000)")
     parser.add_argument("--max-joins", type=int, default=DEFAULT_MAX_JOINS,
                         help="max chats to join when --auto-join is set")
-    parser.add_argument("--max-flood-wait", type=int, default=DEFAULT_MAX_FLOOD_WAIT,
-                        help="skip a channel if FloodWait exceeds this many seconds")
+    parser.add_argument("--max-flood-wait", type=int, default=None,
+                        help="skip a channel if FloodWait exceeds this many seconds "
+                             "(defaults to 3600 with --all-history, else 900)")
     parser.add_argument("--max-chars", type=int, default=DEFAULT_MAX_CHARS,
                         help="split output into parts above this many characters")
     parser.add_argument("--dedupe", action="store_true", help="drop identical texts within a channel")
@@ -228,8 +233,24 @@ def build_parser() -> argparse.ArgumentParser:
 # --------------------------------------------------------------------------
 # Orchestration
 # --------------------------------------------------------------------------
+def apply_mode_defaults(args: argparse.Namespace) -> None:
+    """Fill in the caps that depend on the chosen window.
+
+    A full-history scrape must not stop at the default per-channel cap, and it
+    needs more patience with FloodWait. Explicit values still win.
+    """
+    all_history = getattr(args, "all_history", False)
+    if getattr(args, "max_per_channel", None) is None:
+        args.max_per_channel = 0 if all_history else DEFAULT_MAX_PER_CHANNEL
+    if getattr(args, "max_flood_wait", None) is None:
+        args.max_flood_wait = HISTORY_MAX_FLOOD_WAIT if all_history else DEFAULT_MAX_FLOOD_WAIT
+
+
 async def run(args: argparse.Namespace) -> int:
     config.ensure_directories()
+    apply_mode_defaults(args)
+    all_history = getattr(args, "all_history", False)
+
     log = setup_logging(LOG_DIR / "run.log", verbose=args.verbose)
     tz = get_tz(args.timezone)
 
@@ -285,10 +306,14 @@ async def run(args: argparse.Namespace) -> int:
         since=args.since,
         until=args.until,
         since_last_run=args.since_last_run,
+        all_history=all_history,
         last_run=last_run,
         tz=tz,
     )
     log.info("Window UTC: %s .. %s", window.since.isoformat(), window.until.isoformat())
+    if all_history:
+        print("Full-history mode: reading every message (no per-channel cap). "
+              "This can take a long time and may hit rate limits.")
 
     channels_path = Path(args.channels_file)
     if not channels_path.exists():

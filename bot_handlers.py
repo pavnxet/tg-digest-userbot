@@ -73,9 +73,10 @@ HELP_TEXT = (
     "/tag <#> <tag> · /untag <#> <tag>\n"
     "/groups — tag groups\n\n"
     "Runs\n"
-    "/run <window> [group:<tag>] [channel:<n>] [dedupe] [min:<N>] [views] [send:no]\n"
+    "/run <window> [group:<tag>] [channel:<n>] [dedupe] [min:<N>] [views] [send:no] [resume]\n"
+    "/history <#|@name|link> [dedupe] [min:<N>] [views] [send:yes] — पूरी history (लंबा चलता है)\n"
     "/stop · /preview <window> · /last\n"
-    "window: today | yesterday | 6h | 24h | 3d | since-last | <YYYY-MM-DD HH:MM> x2\n\n"
+    "window: today | yesterday | 6h | 24h | 3d | since-last | all | <YYYY-MM-DD HH:MM> x2\n\n"
     "Schedules (IST, max 5)\n"
     "/schedule add <HH:MM> <window> [group:<tag>]\n"
     "/schedule list | remove <n> | pause <n> | resume <n>\n\n"
@@ -109,6 +110,7 @@ COMMAND_MENU = (
     ("untag", "tag हटाएँ"),
     ("groups", "tag groups"),
     ("run", "scraper चलाएँ"),
+    ("history", "पूरी history scrape"),
     ("stop", "run रोकें"),
     ("preview", "dry-run preview"),
     ("last", "पिछला digest भेजें"),

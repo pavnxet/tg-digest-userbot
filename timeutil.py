@@ -14,6 +14,10 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 IST_NAME = "Asia/Kolkata"
 UTC = timezone.utc
 
+# A full-history window starts here. Telegram did not exist before 2013, so this
+# is safely "the beginning" while still being a real, timezone-aware datetime.
+ALL_HISTORY_SINCE = datetime(1970, 1, 1, tzinfo=UTC)
+
 _DURATION_RE = re.compile(r"^\s*(\d+)\s*([hdw])\s*$", re.IGNORECASE)
 _UNIT_HOURS = {"h": 1, "d": 24, "w": 24 * 7}
 
@@ -82,6 +86,7 @@ def resolve_window(
     since: Optional[str] = None,
     until: Optional[str] = None,
     since_last_run: bool = False,
+    all_history: bool = False,
     last_run: Optional[datetime] = None,
     tz=None,
     now: Optional[datetime] = None,
@@ -104,13 +109,19 @@ def resolve_window(
             bool(last),
             bool(since or until),
             since_last_run,
+            all_history,
         )
     )
     if options_chosen != 1:
         raise ValueError(
             "Choose exactly one time option: --today, --yesterday, --last, "
-            "--since/--until, or --since-last-run."
+            "--since/--until, --since-last-run, or --all-history."
         )
+
+    if all_history:
+        # From the beginning of time until now: the scraper's "stop when we pass
+        # the window start" break never fires, so it walks to the first message.
+        return Window(ALL_HISTORY_SINCE, now)
 
     if today:
         start = now.astimezone(tz).replace(hour=0, minute=0, second=0, microsecond=0)
