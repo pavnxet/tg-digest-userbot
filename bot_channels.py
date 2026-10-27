@@ -3,10 +3,15 @@
 All of these run through ``BotApp.handle`` / ``handle_callback``; the panel only
 registers commands and confirmation actions. Resolution uses read-only user
 client calls only (get_entity / CheckChatInviteRequest) -- never a join.
+
+Inline buttons carry a short **token**, never a live index: an old button can
+then never act on a different channel after the list has changed.
 """
 from __future__ import annotations
 
 import logging
+import secrets
+import time
 from typing import Any, Optional
 
 from telethon.tl.custom import Button
@@ -17,6 +22,8 @@ from channels import parse_channel_line
 _log = logging.getLogger("tgdigest.bot.channels")
 
 PAGE_SIZE = 20
+PICK_TTL_SECONDS = 120.0
+MAX_LIST_TOKENS = 32
 
 
 class ChannelPanel:
@@ -25,8 +32,8 @@ class ChannelPanel:
     def __init__(self, app: Any) -> None:
         self.app = app
         self.store = app.channels_store
-        self._page = 0
-        self._page_tag: Optional[str] = None
+        self._tags: dict[str, Optional[str]] = {}      # token -> tag filter
+        self._picks: dict[str, tuple[str, float]] = {}  # token -> (raw line, expiry)
         app.commands.update({
             "/channels": self.cmd_channels,
             "/add": self.cmd_add,
@@ -39,8 +46,8 @@ class ChannelPanel:
         })
         app.register_confirmation("remove", self._do_remove)
         app.register_confirmation("add_anyway", self._do_add_anyway)
-        app.register_callback(b"chlist:next", self._cb_next)
-        app.register_callback(b"chlist:prev", self._cb_prev)
+        app.register_callback_prefix(b"chlist:", self._cb_page)
+        app.register_callback_prefix(b"rm:", self._cb_pick)
 
     # -- helpers -----------------------------------------------------------
     def _arg(self, event: Any) -> str:
@@ -52,7 +59,18 @@ class ChannelPanel:
             entries = [e for e in entries if tag in e.tags]
         return entries
 
-    def _render_page(self, tag: Optional[str], page: int) -> tuple[str, list]:
+    def _token_for(self, tag: Optional[str]) -> str:
+        """A short, stable token for a tag filter (callback data is capped at 64B)."""
+        for token, existing in self._tags.items():
+            if existing == tag:
+                return token
+        token = secrets.token_urlsafe(5)
+        self._tags[token] = tag
+        while len(self._tags) > MAX_LIST_TOKENS:
+            self._tags.pop(next(iter(self._tags)))
+        return token
+
+    def _page_view(self, tag: Optional[str], page: int) -> tuple[str, list]:
         entries = self._filtered(tag)
         total_pages = max(1, (len(entries) + PAGE_SIZE - 1) // PAGE_SIZE)
         page = max(0, min(page, total_pages - 1))
@@ -69,15 +87,15 @@ class ChannelPanel:
             label = f" {entry.label}" if entry.label else ""
             lines.append(f"{entry.index}. {entry.spec.value}{label}{tags} {' '.join(marks)}".rstrip())
         text = head + "\n".join(lines) if lines else head + "(खाली)"
-        buttons = []
+
+        # The page number travels in the button, so each message pages itself.
+        token = self._token_for(tag)
         row = []
         if page > 0:
-            row.append(Button.inline("⬅️", b"chlist:prev"))
+            row.append(Button.inline("⬅️", f"chlist:{token}:{page - 1}".encode()))
         if page < total_pages - 1:
-            row.append(Button.inline("➡️", b"chlist:next"))
-        if row:
-            buttons.append(row)
-        return text, buttons
+            row.append(Button.inline("➡️", f"chlist:{token}:{page + 1}".encode()))
+        return text, ([row] if row else [])
 
     async def _resolve_add(self, target_text: str) -> Optional[dict]:
         spec = parse_channel_line(target_text)
@@ -99,7 +117,9 @@ class ChannelPanel:
                 key = int(spec.value) if spec.kind == "id" else spec.value
                 entity = await self.app.user.get_entity(key)
                 info["title"] = getattr(entity, "title", None) or getattr(entity, "first_name", None)
-                info["member"] = True
+                # get_entity succeeding does NOT mean we are a member: any public
+                # channel resolves. Leave membership unknown rather than claim it.
+                info["member"] = None
                 info["id"] = getattr(entity, "id", None)
         except Exception:  # noqa: BLE001 - unverifiable (e.g. a numeric id not in cache)
             info["unverified"] = True
@@ -109,10 +129,8 @@ class ChannelPanel:
 
     # -- commands ----------------------------------------------------------
     async def cmd_channels(self, event: Any) -> None:
-        arg = self._arg(event)
-        self._page_tag = arg or None
-        self._page = 0
-        text, buttons = self._render_page(self._page_tag, 0)
+        tag = self._arg(event) or None
+        text, buttons = self._page_view(tag, 0)
         await self.app._respond(event, text, buttons=buttons or None)
 
     async def cmd_groups(self, event: Any) -> None:
@@ -141,9 +159,12 @@ class ChannelPanel:
             await self.app._respond(event, "❌ यह entry पहचान नहीं पाई।")
             return
         if info["unverified"]:
+            spec = parse_channel_line(text)
+            known_id = int(spec.value) if spec is not None and spec.kind == "id" else None
             await self.app.ask_confirmation(
                 event, "यह id session cache से verify नहीं हो सका। फिर भी जोड़ें?",
-                "add_anyway", {"text": text}, confirm_label="फिर भी जोड़ें / Add anyway",
+                "add_anyway", {"text": text, "resolved_id": known_id},
+                confirm_label="फिर भी जोड़ें / Add anyway",
             )
             return
         try:
@@ -155,12 +176,17 @@ class ChannelPanel:
             await self.app._respond(event, f"• {result.message}")
             return
         title = info["title"] or "?"
-        member_note = "" if info["member"] else "\n⚠️ आप member नहीं हैं — scraper इसे skip करेगा।"
-        await self.app._respond(event, f"✅ जोड़ा: {title}{member_note}")
+        if info["member"] is False:
+            note = "\n⚠️ आप member नहीं हैं — scraper इसे skip करेगा।"
+        elif info["member"] is None:
+            note = "\nℹ️ सदस्यता की जाँच नहीं हो सकी — पहला run बताएगा।"
+        else:
+            note = ""
+        await self.app._respond(event, f"✅ जोड़ा: {title}{note}")
 
     async def _do_add_anyway(self, event: Any, payload: dict) -> None:
         try:
-            result = self.store.add(payload["text"])
+            result = self.store.add(payload["text"], resolved_id=payload.get("resolved_id"))
         except ChannelError as exc:
             await self.app._respond(event, f"❌ {exc}")
             return
@@ -173,28 +199,49 @@ class ChannelPanel:
             return
         matches = self.store.find(arg)
         if not matches:
-            await self.app._respond(event, "❌ कुछ नहीं मिला।")
+            await self.app._respond(event, "❌ कुछ नहीं मिला। /channels से नंबर देखें।")
             return
         if len(matches) > 1:
-            buttons = [[Button.inline(f"#{m.index} {m.spec.value}", f"rm:{m.index}".encode())] for m in matches]
+            buttons = []
             for match in matches:
-                self.app.register_callback(f"rm:{match.index}".encode(), self._make_remove(match.index))
+                token = secrets.token_urlsafe(6)
+                self._picks[token] = (match.raw, time.time() + PICK_TTL_SECONDS)
+                buttons.append([Button.inline(f"#{match.index} {match.spec.value}", f"rm:{token}".encode())])
             await self.app._respond(event, "कौन सा हटाएँ? / Which one?", buttons=buttons)
             return
         entry = matches[0]
         await self.app.ask_confirmation(
-            event, f"#{entry.index} {entry.spec.value} हटाएँ? / Remove?", "remove", {"index": entry.index},
+            event, f"#{entry.index} {entry.spec.value} हटाएँ? / Remove?", "remove", {"raw": entry.raw},
         )
 
-    def _make_remove(self, index: int):
-        async def handler(event: Any) -> None:
-            await self.app.ask_confirmation(event, f"#{index} हटाएँ? / Remove?", "remove", {"index": index})
-        return handler
+    async def _cb_pick(self, event: Any, rest: bytes) -> None:
+        """A '#<n>' button from an ambiguous /remove."""
+        token = rest.decode("utf-8", "replace")
+        item = self._picks.pop(token, None)
+        if item is None or time.time() > item[1]:
+            await self.app._respond(event, "यह button पुराना है। /remove फिर से भेजें।")
+            return
+        raw, _expiry = item
+        await self.app.ask_confirmation(
+            event, f"{raw} हटाएँ? / Remove?", "remove", {"raw": raw},
+        )
 
     async def _do_remove(self, event: Any, payload: dict) -> None:
+        raw = payload.get("raw")
+        index = payload.get("index")
         try:
-            self.store.remove(int(payload["index"]))
-        except ChannelError as exc:
+            if raw is not None:
+                # Re-resolve now: the index may have shifted since the button.
+                matches = [e for e in self.store.entries() if e.raw == raw]
+                if not matches:
+                    await self.app._respond(event, "❌ वह channel अब list में नहीं है।")
+                    return
+                index = matches[0].index
+            if index is None:
+                await self.app._respond(event, "❌ हटाने के लिए कुछ नहीं मिला।")
+                return
+            self.store.remove(int(index))
+        except (ChannelError, TypeError) as exc:
             await self.app._respond(event, f"❌ {exc}")
             return
         await self.app._respond(event, "🗑 हटा दिया। / Removed.")
@@ -231,13 +278,12 @@ class ChannelPanel:
             return
         await self._apply_index(event, "untag", parts[0], lambda i: self.store.remove_tag(i, parts[1]))
 
-    # -- pagination callbacks ---------------------------------------------
-    async def _cb_next(self, event: Any) -> None:
-        self._page += 1
-        text, buttons = self._render_page(self._page_tag, self._page)
-        await self.app._respond(event, text, buttons=buttons or None)
-
-    async def _cb_prev(self, event: Any) -> None:
-        self._page = max(0, self._page - 1)
-        text, buttons = self._render_page(self._page_tag, self._page)
-        await self.app._respond(event, text, buttons=buttons or None)
+    # -- pagination -------------------------------------------------------
+    async def _cb_page(self, event: Any, rest: bytes) -> None:
+        """Page a /channels message in place; the token carries its tag filter."""
+        token, _, page_text = rest.decode("utf-8", "replace").partition(":")
+        if token not in self._tags or not page_text.isdigit():
+            await self.app._respond(event, "यह list पुरानी है। /channels फिर से भेजें।")
+            return
+        text, buttons = self._page_view(self._tags[token], int(page_text))
+        await self.app._edit(event, text, buttons=buttons or None)

@@ -98,3 +98,52 @@ def test_owner_file_is_chmod_600(tmp_path):
     path = tmp_path / "owner.json"
     if os.name == "posix":
         assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+
+# --------------------------------------------------------------------------
+# Phase 1: the owner file must be written atomically and must fail closed
+# --------------------------------------------------------------------------
+def test_corrupt_owner_file_does_not_reopen_pairing(tmp_path):
+    from owner import OwnerStore
+
+    path = tmp_path / "owner.json"
+    path.write_text("{ not json", encoding="utf-8")
+    owners = OwnerStore(path)
+    assert owners.corrupt is True
+    assert owners.needs_pairing() is False      # fail closed
+    assert owners.is_owner(OWNER) is False      # nobody is the owner
+    assert owners.claim(STRANGER, "anything") is False
+
+
+def test_missing_owner_file_still_allows_pairing(tmp_path):
+    from owner import OwnerStore
+
+    owners = OwnerStore(tmp_path / "owner.json")
+    assert owners.corrupt is False
+    assert owners.needs_pairing() is True
+
+
+def test_owner_save_is_atomic_and_leaves_no_tmp_file(tmp_path):
+    import json
+
+    from owner import OwnerStore
+
+    path = tmp_path / "owner.json"
+    owners = OwnerStore(path)
+    code = owners.start_pairing()
+    assert owners.claim(OWNER, code) is True
+    assert json.loads(path.read_text(encoding="utf-8"))["owner_id"] == OWNER
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_corrupt_owner_file_ignores_every_command(tmp_path):
+    # A corrupt file must not let a stranger take over via /claim.
+    from owner import OwnerStore
+
+    path = tmp_path / "owner.json"
+    path.write_text("garbage", encoding="utf-8")
+    owners = OwnerStore(path)
+    app, bot, user, owner_store, session = build_app(tmp_path, owner_id=None, needs_pairing=False)
+    app.owners = owners
+    asyncio.run(app.handle(FakeEvent(bot, "/claim abc", STRANGER)))
+    assert not bot.sent

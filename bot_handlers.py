@@ -135,6 +135,7 @@ class BotApp:
         self._pending: dict[str, Pending] = {}
         self._confirm_actions: dict[str, Any] = {}
         self._extra_callbacks: dict[bytes, Any] = {}
+        self._prefix_callbacks: dict[bytes, Any] = {}
         # The single command registry. Handlers are reachable only through the
         # guarded dispatcher below, so adding one here is automatically guarded.
         self.commands = {
@@ -235,6 +236,14 @@ class BotApp:
             handler = self._extra_callbacks.get(data)
             if handler is not None:
                 await handler(event)
+                return
+            for prefix, prefix_handler in self._prefix_callbacks.items():
+                if data.startswith(prefix):
+                    await prefix_handler(event, data[len(prefix):])
+                    return
+            # A button from an old message (or an unknown payload): say so instead
+            # of doing nothing at all.
+            await self._respond(event, "यह button पुराना है। /help देखें।")
 
     # -- generic confirmations (destructive actions) -----------------------
     def register_confirmation(self, action: str, handler: Any) -> None:
@@ -242,6 +251,10 @@ class BotApp:
 
     def register_callback(self, data: bytes, handler: Any) -> None:
         self._extra_callbacks[data] = handler
+
+    def register_callback_prefix(self, prefix: bytes, handler: Any) -> None:
+        """Handle every callback whose data starts with `prefix` (rest is passed on)."""
+        self._prefix_callbacks[prefix] = handler
 
     async def ask_confirmation(self, event: Any, text: str, action: str,
                                payload: Optional[dict] = None,
@@ -647,6 +660,18 @@ class BotApp:
             await self._respond(event, "⚠️ मैं आपका message delete नहीं कर सका। कृपया इसे मैन्युअल रूप से "
                                        "delete करें। / Please delete it manually.")
         return text
+
+    async def _edit(self, event: Any, text: str, buttons: Any = None,
+                    parse_mode: Any = None) -> None:
+        """Edit the message a button belongs to; fall back to sending a new one."""
+        edit = getattr(event, "edit", None)
+        if edit is not None:
+            try:
+                await edit(text, buttons=buttons, parse_mode=parse_mode)
+                return
+            except Exception:  # noqa: BLE001 - fall back to a fresh message
+                self.log.debug("could not edit the message; sending a new one")
+        await self._respond(event, text, buttons=buttons, parse_mode=parse_mode)
 
     async def _respond(self, event: Any, text: str, buttons: Any = None,
                        parse_mode: Any = None) -> None:

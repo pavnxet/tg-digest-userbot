@@ -26,8 +26,24 @@ def test_channels_lists_and_paginates(tmp_path):
     app, bot, user, owners, session = build_app(tmp_path, channels_text=text)
     _run(app.handle(FakeEvent(bot, "/channels", OWNER)))
     assert "page 1/2" in _texts(bot)[-1]
-    _run(app.handle_callback(FakeCallbackEvent(bot, b"chlist:next", OWNER)))
+    token = next(iter(app._channel_panel._tags))
+    _run(app.handle_callback(FakeCallbackEvent(bot, f"chlist:{token}:1".encode(), OWNER)))
     assert "page 2/2" in _texts(bot)[-1]
+
+
+def test_pagination_edits_the_message_and_keeps_its_own_tag(tmp_path):
+    # Two lists open at once must not interfere, and paging edits in place.
+    text = "\n".join(f"@chan{i} | tags=news" for i in range(21)) + "\n@other | tags=jobs\n"
+    app, bot, user, owners, session = build_app(tmp_path, channels_text=text)
+    _run(app.handle(FakeEvent(bot, "/channels news", OWNER)))
+    news_token = next(iter(app._channel_panel._tags))
+    _run(app.handle(FakeEvent(bot, "/channels", OWNER)))          # a second list
+
+    event = FakeCallbackEvent(bot, f"chlist:{news_token}:1".encode(), OWNER)
+    _run(app.handle_callback(event))
+    assert event.edits, "paging should edit the message, not send a new one"
+    assert "tag=news" in event.edits[-1][0]
+    assert "page 2/2" in event.edits[-1][0]
 
 
 def test_channels_filters_by_tag(tmp_path):
@@ -110,3 +126,60 @@ def test_channel_commands_are_owner_guarded(tmp_path):
         _run(app.handle(event))
         assert event.replies == [], f"{command} replied to a non-owner"
     assert bot.sent == []
+
+
+# --------------------------------------------------------------------------
+# Phase 1: stale buttons must never act on the wrong channel
+# --------------------------------------------------------------------------
+def test_stale_remove_button_does_nothing(tmp_path):
+    app, bot, user, owners, session = build_app(tmp_path, channels_text="@a | News\n@b | News\n")
+    _run(app.handle(FakeEvent(bot, "/remove News", OWNER)))      # ambiguous -> buttons
+    assert app._channel_panel._picks
+    app._channel_panel._picks.clear()                            # simulate expiry
+    _run(app.handle_callback(FakeCallbackEvent(bot, b"rm:expired", OWNER)))
+    assert "पुराना" in _texts(bot)[-1]
+    assert len(app.channels_store.entries()) == 2
+
+
+def test_stale_channel_list_button_says_so(tmp_path):
+    app, bot, user, owners, session = build_app(tmp_path, channels_text="@a\n")
+    _run(app.handle_callback(FakeCallbackEvent(bot, b"chlist:expired:1", OWNER)))
+    assert "पुरानी" in _texts(bot)[-1]
+
+
+def test_unknown_callback_gets_a_reply(tmp_path):
+    app, bot, user, owners, session = build_app(tmp_path, channels_text="@a\n")
+    _run(app.handle_callback(FakeCallbackEvent(bot, b"totally:unknown", OWNER)))
+    assert "पुराना" in _texts(bot)[-1]
+
+
+def test_remove_by_raw_targets_the_same_channel_after_a_shift(tmp_path):
+    # The index moves when a line is deleted; the raw line must not.
+    app, bot, user, owners, session = build_app(tmp_path, channels_text="@a\n@b\n@c\n")
+    target = app.channels_store.entries()[1]                     # @b
+    _run(app._channel_panel._do_remove(FakeEvent(bot, "/x", OWNER), {"raw": target.raw}))
+    assert [e.spec.value for e in app.channels_store.entries()] == ["a", "c"]
+
+
+def test_remove_by_raw_when_the_channel_is_already_gone(tmp_path):
+    app, bot, user, owners, session = build_app(tmp_path, channels_text="@a\n")
+    _run(app._channel_panel._do_remove(FakeEvent(bot, "/x", OWNER), {"raw": "@gone"}))
+    assert "नहीं है" in _texts(bot)[-1]
+    assert len(app.channels_store.entries()) == 1
+
+
+def test_unverified_id_confirmation_carries_the_id(tmp_path):
+    app, bot, user, owners, session = build_app(tmp_path, channels_text="@a\n")
+    _run(app.handle(FakeEvent(bot, "/add -1001234567890", OWNER)))
+    pending = list(app._pending.values())
+    assert pending, "an unverifiable id must ask before adding"
+    assert pending[0].payload["resolved_id"] == -1001234567890
+
+
+def test_add_reports_membership_as_unknown_for_a_public_channel(tmp_path):
+    from types import SimpleNamespace
+
+    app, bot, user, owners, session = build_app(tmp_path, channels_text="@a\n")
+    user.entities["news"] = SimpleNamespace(id=1, title="News")
+    _run(app.handle(FakeEvent(bot, "/add @news", OWNER)))
+    assert "सदस्यता की जाँच नहीं हो सकी" in _texts(bot)[-1]

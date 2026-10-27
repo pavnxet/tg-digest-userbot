@@ -282,10 +282,16 @@ class FakeCallbackEvent:
         self.chat_id = sender_id if chat_id is None else chat_id
         self.is_private = is_private
         self.replies: list[tuple] = []
+        self.edits: list[tuple] = []
         self.answered = False
 
     async def answer(self, *args, **kwargs):
         self.answered = True
+
+    async def edit(self, text=None, buttons=None, parse_mode=None, **kwargs):
+        """Edit the message the button belongs to (Telethon's CallbackQuery.edit)."""
+        self.edits.append((text, buttons))
+        return await self.bot.send_message(self.chat_id, text, buttons=buttons)
 
     async def respond(self, text, buttons=None, parse_mode=None, **kwargs):
         self.replies.append((text, buttons))

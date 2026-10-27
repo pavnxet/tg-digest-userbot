@@ -79,7 +79,14 @@ async def run_bot(settings=None) -> None:
     settings = settings or load_bot_settings()
 
     owners = OwnerStore(OWNER_FILE, preset_owner_id=settings.owner_id)
-    if owners.needs_pairing():
+    if owners.corrupt:
+        # Fail closed: an unreadable owner file must never silently re-open pairing.
+        print("=" * 52)
+        print("owner.json is unreadable — refusing to re-pair automatically.")
+        print(f"Repair it, or delete {OWNER_FILE} and start again to re-pair.")
+        print("Every message will be ignored until this is resolved.")
+        print("=" * 52)
+    elif owners.needs_pairing():
         code = owners.start_pairing()
         print("=" * 52)
         print(f"Pairing code (terminal only): {code}")

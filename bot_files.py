@@ -3,15 +3,28 @@ from __future__ import annotations
 
 import logging
 import re
+import secrets
+import time
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional
 
 from telethon.tl.custom import Button
 
-from files_store import FIND_LIMIT, clean_older_than, delete_files, files_to_clean, find, list_outputs
+from files_store import (
+    FIND_LIMIT,
+    _safe_in_dir,
+    clean_older_than,
+    delete_files,
+    files_to_clean,
+    find,
+    list_outputs,
+)
 from timeutil import get_tz
 
 _log = logging.getLogger("tgdigest.bot.filespanel")
+
+FILE_TOKEN_TTL = 3600.0   # an hour to press a resend button
 
 _WINDOW_RE = re.compile(r"^(\d+)(h|d)$", re.IGNORECASE)
 
@@ -54,8 +67,10 @@ class FilePanel:
         self.output_dir = output_dir
         self.settings = settings
         self._infos: list = []
+        self._files: dict[str, tuple[str, float]] = {}   # token -> (path, expiry)
         app.commands.update({"/files": self.cmd_files, "/clean": self.cmd_clean, "/find": self.cmd_find})
         app.register_confirmation("clean", self._do_clean)
+        app.register_callback_prefix(b"file:", self._cb_file)
 
     def _arg(self, event: Any) -> str:
         return (getattr(event, "text", "") or "").partition(" ")[2].strip()
@@ -72,25 +87,34 @@ class FilePanel:
         for index, info in enumerate(self._infos, start=1):
             when = datetime.fromtimestamp(info.mtime, tz=get_tz()).strftime("%d/%m %H:%M")
             lines.append(f"{index}. {info.name} — {_human_size(info.size)} — {when} — {info.messages} msgs")
+        # Each button carries a token bound to *that* file, so pressing a button
+        # from an older /files list can never send a different file.
         buttons = []
-        for index in range(1, len(self._infos) + 1):
-            data = f"file:{index}".encode()
-            self.app.register_callback(data, self._make_resend(index))
-            buttons.append([Button.inline(f"📎 {index}", data)])
+        now = time.time()
+        self._files = {k: v for k, v in self._files.items() if v[1] > now}   # prune expired
+        while len(self._files) > 100:
+            self._files.pop(next(iter(self._files)))
+        for index, info in enumerate(self._infos, start=1):
+            token = secrets.token_urlsafe(6)
+            self._files[token] = (str(info.path), now + FILE_TOKEN_TTL)
+            buttons.append([Button.inline(f"📎 {index}", f"file:{token}".encode())])
         await self.app._respond(event, f"📁 Recent outputs — {len(infos)} file(s), {_human_size(total)}:\n" + "\n".join(lines), buttons=buttons)
 
-    def _make_resend(self, index: int):
-        async def handler(event: Any) -> None:
-            if not (1 <= index <= len(self._infos)):
-                await self.app._respond(event, "यह file अब उपलब्ध नहीं।")
-                return
-            info = self._infos[index - 1]
-            try:
-                await self.app.bot.send_file(event.chat_id, str(info.path), caption=info.name)
-            except Exception:  # noqa: BLE001
-                await self.app._respond(event, "⚠️ भेजने में समस्या।")
-
-        return handler
+    async def _cb_file(self, event: Any, rest: bytes) -> None:
+        """Resend the file this button was created for."""
+        token = rest.decode("utf-8", "replace")
+        item = self._files.pop(token, None)
+        if item is None or time.time() > item[1]:
+            await self.app._respond(event, "यह button पुराना है। /files फिर से भेजें।")
+            return
+        path = Path(item[0])
+        if not path.exists() or not _safe_in_dir(path, self.output_dir):
+            await self.app._respond(event, "वह file अब मौजूद नहीं है। /files देखें।")
+            return
+        try:
+            await self.app.bot.send_file(event.chat_id, str(path), caption=path.name)
+        except Exception:  # noqa: BLE001
+            await self.app._respond(event, "⚠️ भेजने में समस्या। /last से फिर भेजें।")
 
     # -- /clean ------------------------------------------------------------
     async def cmd_clean(self, event: Any) -> None:

@@ -70,6 +70,10 @@ class ScheduleStore:
             return False, "window चाहिए, जैसे today या 24h।"
         if window not in WINDOW_TOKENS:
             return False, "window गलत है। इनमें से एक: " + " · ".join(WINDOW_TOKENS)
+        if any(item.time == time for item in self._items):
+            # Two runs at the same minute collide with the 5-minute gap, so the
+            # second would be refused anyway -- catch it here instead.
+            return False, f"{time} पर पहले से एक schedule है। पहले उसे हटाएँ (/schedule list)।"
         if len(self._items) >= MAX_SCHEDULES:
             return False, f"अधिकतम {MAX_SCHEDULES} schedules अनुमत हैं।"
         self._items.append(Schedule(time=time, window=window, tag=tag))

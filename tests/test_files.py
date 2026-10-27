@@ -132,8 +132,22 @@ def test_files_lists_and_resends(tmp_path):
     _digest(out / "digest_a.json", [{"name": "A", "link_base": "", "messages": []}], messages_total=3)
     asyncio.run(app.handle(FakeEvent(bot, "/files", OWNER)))
     assert "digest_a.json" in _texts(bot)[-1]
-    asyncio.run(app.handle_callback(FakeCallbackEvent(bot, b"file:1", OWNER)))
+    token = next(iter(app._file_panel._files))
+    asyncio.run(app.handle_callback(FakeCallbackEvent(bot, f"file:{token}".encode(), OWNER)))
     assert bot.files
+
+
+def test_files_button_resends_the_file_it_was_made_for(tmp_path):
+    # An old button must never send a newer file just because the index matches.
+    app, bot, user, owners, session = _app(tmp_path)
+    out = tmp_path / "output"
+    _digest(out / "digest_a.json", [], 1)
+    asyncio.run(app.handle(FakeEvent(bot, "/files", OWNER)))
+    old_token = next(iter(app._file_panel._files))
+    _digest(out / "digest_b.json", [], 1)
+    asyncio.run(app.handle(FakeEvent(bot, "/files", OWNER)))      # a newer list
+    asyncio.run(app.handle_callback(FakeCallbackEvent(bot, f"file:{old_token}".encode(), OWNER)))
+    assert bot.files[-1][2] == "digest_a.json"
 
 
 def test_clean_confirm_deletes(tmp_path):

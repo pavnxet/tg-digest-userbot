@@ -226,3 +226,12 @@ def test_store_rejects_an_unknown_window(tmp_path):
     store = ScheduleStore(tmp_path / "schedule.json")
     assert store.add("09:00", "banana")[0] is False
     assert store.add("09:00", "all")[0] is True
+
+
+def test_duplicate_time_is_rejected(tmp_path):
+    store = ScheduleStore(tmp_path / "schedule.json")
+    assert store.add("09:00", "today")[0] is True
+    ok, message = store.add("09:00", "24h")
+    assert ok is False
+    assert "पहले से" in message
+    assert len(store.all()) == 1
