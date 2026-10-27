@@ -87,6 +87,11 @@ class ChannelPanel:
             label = f" {entry.label}" if entry.label else ""
             lines.append(f"{entry.index}. {entry.spec.value}{label}{tags} {' '.join(marks)}".rstrip())
         text = head + "\n".join(lines) if lines else head + "(खाली)"
+        if not entries:
+            text = (
+                "📋 कोई channel नहीं" + (f" (tag={tag})" if tag else "") + "\n\n"
+                "/add @name से जोड़ें, या /channels (बिना tag) देखें।"
+            )
 
         # The page number travels in the button, so each message pages itself.
         token = self._token_for(tag)
@@ -246,37 +251,48 @@ class ChannelPanel:
             return
         await self.app._respond(event, "🗑 हटा दिया। / Removed.")
 
-    async def _apply_index(self, event: Any, verb: str, index_str: str, fn) -> None:
+    async def _apply_index(self, event: Any, verb: str, index_str: str, fn, done: str) -> None:
+        """Apply a per-channel edit and say exactly which channel changed."""
         index_str = (index_str or "").lstrip("#")
         if not index_str.isdigit():
-            await self.app._respond(event, f"उपयोग: /{verb} <#>")
+            await self.app._respond(event, f"उपयोग: /{verb} <#>   (/channels से नंबर देखें)")
             return
+        index = int(index_str)
+        entry = self.store.by_index(index)
+        if entry is None:
+            await self.app._respond(event, f"❌ #{index} नहीं मिला। /channels से नंबर देखें।")
+            return
+        name = entry.label or entry.spec.value
         try:
-            fn(int(index_str))
+            fn(index)
         except ChannelError as exc:
             await self.app._respond(event, f"❌ {exc}")
             return
-        await self.app._respond(event, "✅ हो गया। / done.")
+        await self.app._respond(event, f"✅ #{index} {name} — {done}")
 
     async def cmd_pause(self, event: Any) -> None:
-        await self._apply_index(event, "pause", self._arg(event), lambda i: self.store.set_paused(i, True))
+        await self._apply_index(event, "pause", self._arg(event),
+                                lambda i: self.store.set_paused(i, True), "pause कर दिया ⏸")
 
     async def cmd_resume(self, event: Any) -> None:
-        await self._apply_index(event, "resume", self._arg(event), lambda i: self.store.set_paused(i, False))
+        await self._apply_index(event, "resume", self._arg(event),
+                                lambda i: self.store.set_paused(i, False), "फिर से चालू ▶️")
 
     async def cmd_tag(self, event: Any) -> None:
         parts = self._arg(event).split()
         if len(parts) < 2:
             await self.app._respond(event, "उपयोग: /tag <#> <tag>")
             return
-        await self._apply_index(event, "tag", parts[0], lambda i: self.store.add_tag(i, parts[1]))
+        await self._apply_index(event, "tag", parts[0], lambda i: self.store.add_tag(i, parts[1]),
+                                f"tag '{parts[1]}' लगा दिया")
 
     async def cmd_untag(self, event: Any) -> None:
         parts = self._arg(event).split()
         if len(parts) < 2:
             await self.app._respond(event, "उपयोग: /untag <#> <tag>")
             return
-        await self._apply_index(event, "untag", parts[0], lambda i: self.store.remove_tag(i, parts[1]))
+        await self._apply_index(event, "untag", parts[0], lambda i: self.store.remove_tag(i, parts[1]),
+                                f"tag '{parts[1]}' हटा दिया")
 
     # -- pagination -------------------------------------------------------
     async def _cb_page(self, event: Any, rest: bytes) -> None:

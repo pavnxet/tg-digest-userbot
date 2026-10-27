@@ -41,3 +41,30 @@ def test_settings_commands_are_owner_guarded(tmp_path):
         asyncio.run(app.handle(event))
         assert event.replies == []
     assert bot.sent == []
+
+
+# --------------------------------------------------------------------------
+# Phase 2: /settings must explain itself
+# --------------------------------------------------------------------------
+def test_settings_shows_what_each_key_does_and_its_range(tmp_path):
+    app, bot, user, owners, session = _app(tmp_path)
+    asyncio.run(app.handle(FakeEvent(bot, "/settings", OWNER)))
+    text = _texts(bot)[-1]
+    assert "json · jsonl · txt" in text          # allowed values for format
+    assert "0-500" in text                        # the range for min_chars
+    assert "1-60" in text                         # the range for retention_days
+    assert "/set" in text                         # how to change one
+
+
+def test_set_unknown_key_lists_the_valid_keys(tmp_path):
+    app, bot, user, owners, session = _app(tmp_path)
+    asyncio.run(app.handle(FakeEvent(bot, "/set nope 1", OWNER)))
+    text = _texts(bot)[-1]
+    assert "मान्य keys" in text
+    assert "retention_days" in text
+
+
+def test_set_without_a_value_lists_the_valid_keys(tmp_path):
+    app, bot, user, owners, session = _app(tmp_path)
+    asyncio.run(app.handle(FakeEvent(bot, "/set dedupe", OWNER)))
+    assert "मान्य keys" in _texts(bot)[-1]

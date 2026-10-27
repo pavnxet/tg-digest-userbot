@@ -60,6 +60,21 @@ def _int_range(lo: int, hi: int) -> Callable[[str], int]:
     return check
 
 
+# key -> (what it does, allowed values). Shown by /settings so the owner never
+# has to guess a range.
+SETTING_HELP: dict[str, tuple[str, str]] = {
+    "format": ("output file format", "json · jsonl · txt"),
+    "dedupe": ("drop near-duplicate messages", "on · off"),
+    "min_chars": ("skip messages shorter than this", "0-500"),
+    "with_views": ("include view counts", "on · off"),
+    "max_chars": ("split into parts above this size", "50000-1000000"),
+    "autodelete_minutes": ("delete my sent digests after N minutes (0 = off)", "0-1440"),
+    "retention_days": ("delete stored digests older than N days", "1-60"),
+    "max_per_channel": ("max messages read per channel", "100-20000"),
+    "summary_prompt": ("prompt embedded in new digests", "a name from /prompts"),
+}
+
+
 VALIDATORS: dict[str, Callable[[str], Any]] = {
     "format": _choice(("json", "jsonl", "txt")),
     "dedupe": _choice(("on", "off")),
@@ -108,7 +123,10 @@ class SettingsStore:
 
     def set(self, key: str, value: str) -> tuple[bool, str]:
         if key not in VALIDATORS:
-            return False, f"अज्ञात key: {key}"
+            return False, (
+                f"अज्ञात key: {key}\n"
+                "मान्य keys: " + ", ".join(sorted(VALIDATORS))
+            )
         try:
             parsed = VALIDATORS[key](value)
         except ValueError as exc:

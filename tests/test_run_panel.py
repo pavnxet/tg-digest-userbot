@@ -125,3 +125,24 @@ def test_run_commands_are_owner_guarded(tmp_path):
         asyncio.run(app.handle(event))
         assert event.replies == []
     assert bot.sent == []
+
+
+# --------------------------------------------------------------------------
+# Phase 2: the summary must say where the files are and how to get them
+# --------------------------------------------------------------------------
+def test_summary_says_where_the_files_are(tmp_path):
+    from types import SimpleNamespace
+
+    app, bot, user, owners, session = build_app(tmp_path, run_script=_sleep_script(tmp_path))
+    panel = app._run_panel
+    out = tmp_path / "output" / "digest_x.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("{}", encoding="utf-8")
+    panel._last_outputs = [out]
+
+    text = panel._summary(SimpleNamespace(result="ok", duration=12.0), send_files=False)
+    assert "output/" in text          # the folder
+    assert "/last" in text            # how to get the file when it was not sent
+
+    sent = panel._summary(SimpleNamespace(result="ok", duration=12.0), send_files=True)
+    assert "/last" not in sent        # no hint when the file was already sent

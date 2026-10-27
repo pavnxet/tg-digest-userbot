@@ -256,7 +256,9 @@ A run missed while the bot was down is **not** caught up; the bot offers a
 "Run now" button instead. If a run is already going, a scheduled run is skipped.
 
 ### Settings
-`/settings` shows all values; `/set <key> <value>` changes one.
+`/settings` lists every value together with what it does and the values it
+accepts (for example `min_chars — skip messages shorter than this — 0-500`);
+`/set <key> <value>` changes one. An unknown key prints the valid keys.
 Keys: `format` (json|jsonl|txt), `dedupe` (on|off), `min_chars` (0-500),
 `with_views` (on|off), `max_chars` (50000-1000000), `autodelete_minutes`
 (0-1440), `retention_days` (1-60), `max_per_channel` (100-20000).

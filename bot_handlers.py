@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import difflib
 import io
 import logging
 import re
@@ -215,7 +216,16 @@ class BotApp:
             await self._handle_input(event)
             return
 
-        await self._respond(event, "समझ नहीं आया। /help देखें।")
+        # Suggest the closest real command instead of a dead end.
+        if command:
+            known = [name.lstrip("/") for name in self.commands]
+            guess = difflib.get_close_matches(command.lstrip("/").lower(), known, n=1, cutoff=0.6)
+            if guess:
+                await self._respond(
+                    event, f"«{command}» नहीं पहचाना। क्या आप /{guess[0]} चाहते थे?\nसभी commands: /help",
+                )
+                return
+        await self._respond(event, "समझ नहीं आया। सभी commands की सूची के लिए /help भेजें।")
 
     async def handle_callback(self, event: Any) -> None:
         """Inline-button entry point. Owner-checked too."""

@@ -79,7 +79,9 @@ class FilePanel:
     async def cmd_files(self, event: Any) -> None:
         infos = list_outputs(self.output_dir)
         if not infos:
-            await self.app._respond(event, "कोई output नहीं मिला।")
+            await self.app._respond(
+                event, "कोई output नहीं मिला। पहला digest बनाने के लिए /run today भेजें।",
+            )
             return
         self._infos = infos[:20]
         total = sum(info.size for info in infos)
@@ -186,7 +188,11 @@ class FilePanel:
                 return
         matches = find(keyword, self.output_dir, hours, FIND_LIMIT)
         if not matches:
-            await self.app._respond(event, f"'{keyword}' कहीं नहीं मिला।")
+            await self.app._respond(
+                event,
+                f"'{keyword}' कहीं नहीं मिला।\n"
+                "बड़ा window आज़माएँ (/find <keyword> 3d) या /files से देखें कि कौन-सी files हैं।",
+            )
             return
         lines = [f"🔎 {len(matches)} match(es) for '{keyword}':"]
         for match in matches:

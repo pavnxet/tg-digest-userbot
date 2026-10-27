@@ -71,3 +71,16 @@ def test_bot_client_sends_plain_text(monkeypatch, tmp_path):
     monkeypatch.setattr(bot, "BOT_SESSION_BASENAME", str(tmp_path / "bot"))
     client = bot.build_bot_client(SimpleNamespace(api_id=1, api_hash="h"))
     assert client.parse_mode is None
+
+
+def test_unknown_command_suggests_the_closest(tmp_path):
+    app, bot, user, owners, session = build_app(tmp_path)
+    asyncio.run(app.handle(FakeEvent(bot, "/helpp", OWNER)))
+    text = bot.sent[-1][1]
+    assert "/help" in text and "नहीं पहचाना" in text
+
+
+def test_unknown_command_without_a_close_match_still_explains(tmp_path):
+    app, bot, user, owners, session = build_app(tmp_path)
+    asyncio.run(app.handle(FakeEvent(bot, "/zzzzzzzz", OWNER)))
+    assert "/help" in bot.sent[-1][1]

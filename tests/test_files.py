@@ -263,3 +263,21 @@ def test_files_shows_the_total(tmp_path):
     _digest(out / "digest_a.json", [], 1)
     asyncio.run(app.handle(FakeEvent(bot, "/files", OWNER)))
     assert "1 file(s)" in _texts(bot)[-1]
+
+
+# --------------------------------------------------------------------------
+# Phase 2: empty states point at the next step
+# --------------------------------------------------------------------------
+def test_files_empty_suggests_a_run(tmp_path):
+    app, bot, *_ = _app(tmp_path)
+    asyncio.run(app.handle(FakeEvent(bot, "/files", OWNER)))
+    assert "/run" in _texts(bot)[-1]
+
+
+def test_find_with_no_match_suggests_a_bigger_window(tmp_path):
+    app, bot, *_ = _app(tmp_path)
+    out = tmp_path / "output"
+    _digest(out / "digest_a.json", [], 1)
+    asyncio.run(app.handle(FakeEvent(bot, "/find nothinghere", OWNER)))
+    text = _texts(bot)[-1]
+    assert "3d" in text and "/files" in text

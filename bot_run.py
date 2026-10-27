@@ -216,7 +216,7 @@ class RunPanel:
 
     async def _final(self, chat_id: Any, result: Any, send_files: bool) -> None:
         self._last_outputs = self._new_outputs(result.started_at)
-        await self.app.bot.send_message(chat_id, self._summary(result))
+        await self.app.bot.send_message(chat_id, self._summary(result, send_files))
         if send_files and self._last_outputs:
             await self._send_outputs(chat_id)
 
@@ -224,7 +224,7 @@ class RunPanel:
         files = sorted(self.output_dir.glob("digest_*"), key=lambda p: p.stat().st_mtime)
         return [p for p in files if p.stat().st_mtime >= since - 2]
 
-    def _summary(self, result: Any) -> str:
+    def _summary(self, result: Any, send_files: bool = True) -> str:
         icon = {"ok": "✅", "failed": "❌", "timeout": "⏱", "stopped": "🛑"}.get(result.result, "•")
         lines = [f"{icon} Run {result.result} — {int(result.duration)}s"]
         if self._last_outputs:
@@ -240,7 +240,9 @@ class RunPanel:
                 lines.append(f"~tokens≈{total_chars // 4} (Latin) / {int(total_chars / 1.5)} (Devanagari)")
             except (OSError, ValueError):
                 pass
-            lines.append(f"files: {len(self._last_outputs)}")
+            lines.append(f"files: {len(self._last_outputs)} — {self.output_dir.name}/ folder में")
+            if not send_files:
+                lines.append("फ़ाइल भेजी नहीं गई — /last भेजने से मिल जाएगी।")
         if self._last_all_history and result.result in ("timeout", "failed", "stopped"):
             lines.append(
                 "यह लंबा run पूरा नहीं हुआ। जहाँ तक पढ़ा गया वह checkpoint में सुरक्षित है — "

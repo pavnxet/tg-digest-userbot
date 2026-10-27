@@ -183,3 +183,32 @@ def test_add_reports_membership_as_unknown_for_a_public_channel(tmp_path):
     user.entities["news"] = SimpleNamespace(id=1, title="News")
     _run(app.handle(FakeEvent(bot, "/add @news", OWNER)))
     assert "सदस्यता की जाँच नहीं हो सकी" in _texts(bot)[-1]
+
+
+# --------------------------------------------------------------------------
+# Phase 2: say exactly what changed, and suggest the next step
+# --------------------------------------------------------------------------
+def test_pause_says_which_channel_changed(tmp_path):
+    app, bot, user, owners, session = build_app(tmp_path, channels_text="@a | Alpha\n@b | Beta\n")
+    _run(app.handle(FakeEvent(bot, "/pause 2", OWNER)))
+    text = _texts(bot)[-1]
+    assert "#2" in text and "Beta" in text and "pause" in text
+
+
+def test_pause_with_a_bad_index_says_so(tmp_path):
+    app, bot, user, owners, session = build_app(tmp_path, channels_text="@a\n")
+    _run(app.handle(FakeEvent(bot, "/pause 9", OWNER)))
+    assert "नहीं मिला" in _texts(bot)[-1]
+
+
+def test_tag_says_what_it_tagged(tmp_path):
+    app, bot, user, owners, session = build_app(tmp_path, channels_text="@a | Alpha\n")
+    _run(app.handle(FakeEvent(bot, "/tag 1 news", OWNER)))
+    text = _texts(bot)[-1]
+    assert "news" in text and "Alpha" in text
+
+
+def test_channels_empty_suggests_add(tmp_path):
+    app, bot, user, owners, session = build_app(tmp_path, channels_text="# only a comment\n")
+    _run(app.handle(FakeEvent(bot, "/channels", OWNER)))
+    assert "/add" in _texts(bot)[-1]
