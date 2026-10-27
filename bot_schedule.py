@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from telethon.tl.custom import Button
+
+from schedule_store import MAX_SCHEDULES
 
 _log = logging.getLogger("tgdigest.bot.scheduler")
 
@@ -28,13 +30,39 @@ class SchedulePanel:
     def _render(self) -> str:
         items = self.store.all()
         if not items:
-            return "कोई schedule नहीं। /schedule add 09:00 today"
-        lines = []
+            return (
+                "कोई schedule नहीं है।\n\n"
+                "जोड़ने के लिए: /schedule add 09:00 today\n"
+                "(हर रोज़ सुबह 9 बजे आज का digest)"
+            )
+        now = datetime.now(self.store.tz)
+        lines = [f"🗓 Schedules — {len(items)}/{MAX_SCHEDULES} (IST)", ""]
         for index, item in enumerate(items, start=1):
-            mark = "⏸ " if item.paused else ""
-            tag = f" group:{item.tag}" if item.tag else ""
-            lines.append(f"{index}. {mark}{item.time} — {item.window}{tag}")
-        return "🗓 Schedules:\n" + "\n".join(lines)
+            scope = f"group:{item.tag}" if item.tag else "सभी channels"
+            if item.paused:
+                lines.append(f"{index}. ⏸ {item.time} — {item.window} · {scope}")
+                lines.append(f"   रुका हुआ — /schedule resume {index} से चालू करें")
+                continue
+            lines.append(f"{index}. ⏰ {item.time} — {item.window} · {scope}")
+            lines.append(f"   अगली बार: {self._describe(self._next_time(item, now), now)}")
+            if item.last_fired:
+                lines.append(f"   पिछली बार: {item.last_fired} ✅")
+        lines += ["", "बदलें: /schedule remove <n> · pause <n> · resume <n>"]
+        return "\n".join(lines)
+
+    @staticmethod
+    def _next_time(item: Any, now: datetime) -> datetime:
+        hour, minute = (int(part) for part in item.time.split(":"))
+        fire = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        return fire if fire > now else fire + timedelta(days=1)
+
+    @staticmethod
+    def _describe(fire: datetime, now: datetime) -> str:
+        total = int((fire - now).total_seconds() // 60)
+        hours, minutes = divmod(total, 60)
+        wait = f"{hours}h {minutes}m" if hours else f"{minutes}m"
+        day = "आज" if fire.date() == now.date() else "कल"
+        return f"{day} {fire:%H:%M} ({wait} बाद)"
 
     async def cmd_schedule(self, event: Any) -> None:
         parts = self._arg(event).split(None, 1)
@@ -52,7 +80,20 @@ class SchedulePanel:
             tag = None
             for token in tokens[2:]:
                 if token.lower().startswith("group:"):
-                    tag = token.split(":", 1)[1]
+                    tag = token.split(":", 1)[1] or None
+            if tag:
+                # A tag nobody uses would make the schedule silently do nothing.
+                store = getattr(self.app, "channels_store", None)
+                if store is not None:
+                    known = sorted({t for entry in store.entries() for t in entry.tags})
+                    if tag not in known:
+                        await self.app._respond(
+                            event,
+                            f"❌ '{tag}' tag किसी channel पर नहीं है।\n"
+                            f"मौजूदा tags: {', '.join(known) if known else 'कोई नहीं'}\n"
+                            "पहले /tag <#> <tag> से tag लगाएँ।",
+                        )
+                        return
             ok, message = self.store.add(time, window, tag)
             await self.app._respond(event, ("✅ " if ok else "❌ ") + message)
         elif sub == "remove":

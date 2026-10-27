@@ -8,7 +8,7 @@ from typing import Any, Optional
 
 from telethon.tl.custom import Button
 
-from files_store import FIND_LIMIT, clean_older_than, find, list_outputs
+from files_store import FIND_LIMIT, clean_older_than, delete_files, files_to_clean, find, list_outputs
 from timeutil import get_tz
 
 _log = logging.getLogger("tgdigest.bot.filespanel")
@@ -22,6 +22,15 @@ def _human_size(size: int) -> str:
             return f"{size}{unit}"
         size //= 1024
     return f"{size}TB"
+
+
+def _days_arg(token: str) -> Optional[int]:
+    """'3d' or '3' -> 3 days. None when it is not understood."""
+    token = token.strip().lower()
+    if token.isdigit():
+        return int(token)
+    match = re.fullmatch(r"(\d+)\s*d", token)
+    return int(match.group(1)) if match else None
 
 
 def _window_hours(token: str) -> Optional[float]:
@@ -58,6 +67,7 @@ class FilePanel:
             await self.app._respond(event, "कोई output नहीं मिला।")
             return
         self._infos = infos[:20]
+        total = sum(info.size for info in infos)
         lines = []
         for index, info in enumerate(self._infos, start=1):
             when = datetime.fromtimestamp(info.mtime, tz=get_tz()).strftime("%d/%m %H:%M")
@@ -67,7 +77,7 @@ class FilePanel:
             data = f"file:{index}".encode()
             self.app.register_callback(data, self._make_resend(index))
             buttons.append([Button.inline(f"📎 {index}", data)])
-        await self.app._respond(event, "📁 Recent outputs:\n" + "\n".join(lines), buttons=buttons)
+        await self.app._respond(event, f"📁 Recent outputs — {len(infos)} file(s), {_human_size(total)}:\n" + "\n".join(lines), buttons=buttons)
 
     def _make_resend(self, index: int):
         async def handler(event: Any) -> None:
@@ -84,14 +94,53 @@ class FilePanel:
 
     # -- /clean ------------------------------------------------------------
     async def cmd_clean(self, event: Any) -> None:
-        days = int(self.settings.get("retention_days"))
-        await self.app.ask_confirmation(
-            event, f"{days} दिन से पुरानी digest files हटाएँ?", "clean", {"days": days},
-        )
+        """Preview what will go, then confirm. `/clean all` clears everything."""
+        arg = self._arg(event).strip().lower()
+        days: Optional[int] = int(self.settings.get("retention_days"))
+        if arg == "all":
+            days = None
+        elif arg:
+            parsed = _days_arg(arg)
+            if parsed is None or not (0 <= parsed <= 3650):
+                await self.app._respond(
+                    event,
+                    "उपयोग:\n"
+                    f"/clean — {int(self.settings.get('retention_days'))} दिन से पुरानी files\n"
+                    "/clean 3d या /clean 3 — 3 दिन से पुरानी\n"
+                    "/clean all — सारी digest files (तुरंत)",
+                )
+                return
+            days = parsed
+
+        targets = files_to_clean(self.output_dir, days)
+        scope = "सभी" if days is None else f"{days} दिन से पुरानी"
+        if not targets:
+            await self.app._respond(
+                event, f"🧹 {scope} कोई file नहीं मिली — हटाने के लिए कुछ नहीं।",
+            )
+            return
+
+        total = sum(info.size for info in targets)
+        lines = [f"🧹 {scope} {len(targets)} file(s) — कुल {_human_size(total)}", ""]
+        for info in targets[:10]:
+            when = datetime.fromtimestamp(info.mtime, tz=get_tz()).strftime("%d/%m %H:%M")
+            lines.append(f"• {info.name} — {_human_size(info.size)} — {when}")
+        if len(targets) > 10:
+            lines.append(f"… और {len(targets) - 10} file(s)")
+        lines += ["", "हटाएँ? यह वापस नहीं आएँगी।"]
+        await self.app.ask_confirmation(event, "\n".join(lines), "clean", {"days": days})
 
     async def _do_clean(self, event: Any, payload: dict) -> None:
-        deleted = clean_older_than(self.output_dir, int(payload["days"]))
-        await self.app._respond(event, f"🗑 {len(deleted)} file हटाईं।")
+        targets = files_to_clean(self.output_dir, payload.get("days"))
+        names, freed = delete_files(targets)
+        if not names:
+            await self.app._respond(event, "🗑 कुछ भी हटाया नहीं गया।")
+            return
+        await self.app._respond(
+            event,
+            f"🗑 {len(names)} file(s) हटाईं — {_human_size(freed)} खाली हुआ।\n"
+            "बाक़ी files देखने के लिए /files।",
+        )
 
     def run_retention(self) -> list[str]:
         """Called at startup and once a day. Never touches .cache/."""

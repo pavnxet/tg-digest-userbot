@@ -78,7 +78,8 @@ def test_paused_is_skipped(tmp_path):
 # /schedule commands
 # --------------------------------------------------------------------------
 def _app(tmp_path, body="pass\n"):
-    return build_app(tmp_path, channels_text="@a\n", run_script=_script(tmp_path, body))
+    # The channel carries the `news` tag so /schedule add group:news is valid.
+    return build_app(tmp_path, channels_text="@a | A | tags=news\n", run_script=_script(tmp_path, body))
 
 
 def test_schedule_commands(tmp_path):
@@ -170,3 +171,58 @@ def test_missed_run_offers_run_now(tmp_path):
 
     asyncio.run(scenario())
     assert any("Run ok" in t for t in _texts(bot))
+
+
+# --------------------------------------------------------------------------
+# Richer /schedule list, and stricter /schedule add
+# --------------------------------------------------------------------------
+def test_schedule_list_shows_next_run_and_scope(tmp_path):
+    app, bot, user, owners, session = _app(tmp_path)
+    asyncio.run(app.handle(FakeEvent(bot, "/schedule add 09:00 24h group:news", OWNER)))
+    asyncio.run(app.handle(FakeEvent(bot, "/schedule list", OWNER)))
+    text = _texts(bot)[-1]
+    assert "1/5" in text                    # how many of the maximum
+    assert "group:news" in text             # the scope
+    assert "अगली बार" in text                # next run
+    assert "बाद" in text                     # with a countdown
+
+
+def test_schedule_list_marks_paused_entries(tmp_path):
+    app, bot, user, owners, session = _app(tmp_path)
+    asyncio.run(app.handle(FakeEvent(bot, "/schedule add 09:00 today", OWNER)))
+    asyncio.run(app.handle(FakeEvent(bot, "/schedule pause 1", OWNER)))
+    asyncio.run(app.handle(FakeEvent(bot, "/schedule list", OWNER)))
+    text = _texts(bot)[-1]
+    assert "⏸" in text
+    assert "resume 1" in text               # tells you how to switch it back on
+
+
+def test_schedule_list_shows_the_last_fire_date(tmp_path):
+    store = ScheduleStore(tmp_path / "schedule.json")
+    store.add("09:00", "today")
+    store.mark_fired(1, NOON)
+    app, bot, user, owners, session = _app(tmp_path)
+    app._schedule_panel.store._items = store.all()      # same objects
+    asyncio.run(app.handle(FakeEvent(bot, "/schedule list", OWNER)))
+    assert "पिछली बार" in _texts(bot)[-1]
+
+
+def test_schedule_add_rejects_an_unknown_window(tmp_path):
+    app, bot, user, owners, session = _app(tmp_path)
+    asyncio.run(app.handle(FakeEvent(bot, "/schedule add 09:00 banana", OWNER)))
+    assert "window गलत है" in _texts(bot)[-1]
+    assert app._schedule_panel.store.all() == []
+
+
+def test_schedule_add_rejects_an_unknown_tag(tmp_path):
+    app, bot, user, owners, session = _app(tmp_path)
+    asyncio.run(app.handle(FakeEvent(bot, "/schedule add 09:00 today group:nope", OWNER)))
+    text = _texts(bot)[-1]
+    assert "nope" in text and "news" in text      # names the tags that do exist
+    assert app._schedule_panel.store.all() == []
+
+
+def test_store_rejects_an_unknown_window(tmp_path):
+    store = ScheduleStore(tmp_path / "schedule.json")
+    assert store.add("09:00", "banana")[0] is False
+    assert store.add("09:00", "all")[0] is True

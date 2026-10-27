@@ -216,6 +216,9 @@ the line (the scraper skips it and reports it as `paused`).
 | `/preview <window> [group:<tag>]` | Dry-run; shows message counts per channel. No file. |
 | `/last` | Resend the most recent digest. |
 
+The window can go **anywhere** in the line, so `/run 3d channel:5` and
+`/run channel:5 3d` both work.
+
 Limits (to protect the account): one run at a time, minimum 5 minutes between
 runs, maximum 12 runs per day (manual and scheduled share these), 30-minute hard
 timeout. Files are sent as documents; more than 10 parts asks first.
@@ -244,6 +247,11 @@ python main.py --all-history --channels-file one_channel.txt
 ### Schedules (IST, max 5)
 `/schedule add <HH:MM> <window> [group:<tag>]`, `/schedule list`,
 `/schedule remove <n>` (confirms), `/schedule pause <n>`, `/schedule resume <n>`.
+`/schedule list` shows, for each entry, its scope (all channels or a tag), whether
+it is paused, when it will fire **next** (with a countdown) and when it last fired.
+The window and the `group:<tag>` are both validated on `add`, so a typo cannot
+create a schedule that silently does nothing.
+
 A run missed while the bot was down is **not** caught up; the bot offers a
 "Run now" button instead. If a run is already going, a scheduled run is skipped.
 
@@ -254,10 +262,20 @@ Keys: `format` (json|jsonl|txt), `dedupe` (on|off), `min_chars` (0-500),
 (0-1440), `retention_days` (1-60), `max_per_channel` (100-20000).
 
 ### Files and search
-`/files` lists recent outputs with buttons to resend. `/clean` deletes outputs
-older than `retention_days` (after confirmation). `/find <keyword> [6h|24h|3d]`
-searches saved digests locally (no Telegram call), Unicode-normalised, up to 10
-matches with a link.
+`/files` lists recent outputs (with the total count and size) and a button to
+resend any of them.
+
+`/clean` deletes stored digests, always showing **what will go** (names, sizes,
+total) before asking for confirmation:
+
+| Command | Deletes |
+|---|---|
+| `/clean` | files older than `retention_days` |
+| `/clean 3d` (or `/clean 3`) | files older than 3 days |
+| `/clean all` | **every** digest file, immediately |
+
+`/find <keyword> [6h|24h|3d]` searches saved digests locally (no Telegram call),
+Unicode-normalised, up to 10 matches with a link.
 
 ### Health and kill switch
 `/health` shows login state, last run, skipped channels, next schedule, disk

@@ -214,7 +214,9 @@ COMMAND_GUIDES: dict[str, str] = {
         "<b>Examples</b>\n"
         "<code>/run today</code>\n"
         "<code>/run 24h group:jobs min:40</code>\n"
-        "<code>/run 2026-10-17 06:00 2026-10-18 18:00</code>\n\n" + _TIP_LIMITS
+        "<code>/run channel:5 3d</code> — only channel 5, last 3 days\n"
+        "<code>/run 2026-10-17 06:00 2026-10-18 18:00</code>\n\n"
+        "<i>क्रम मायने नहीं रखता — window पहले या बाद में, दोनों चलेंगे।</i>\n\n" + _TIP_LIMITS
     ),
     "history": (
         "<b>/history — one channel's entire history</b>\n\n"
@@ -256,6 +258,7 @@ COMMAND_GUIDES: dict[str, str] = {
     ),
     "schedule": (
         "<b>/schedule — daily runs (IST, max 5)</b>\n\n"
+        "<i>/schedule list हर schedule की अगली और पिछली बार भी दिखाता है।</i>\n\n"
         "<b>Usage</b>\n"
         "<code>/schedule add &lt;HH:MM&gt; &lt;window&gt; [group:&lt;tag&gt;]</code>\n"
         "<code>/schedule list</code>\n"
@@ -267,7 +270,8 @@ COMMAND_GUIDES: dict[str, str] = {
         "<b>Notes</b>\n"
         "• Times are IST. A missed run is <b>not</b> caught up — the bot offers a\n"
         "  “Run now” button instead.\n"
-        "• Scheduled and manual runs share the same limits.\n\n"
+        "• Scheduled and manual runs share the same limits.\n"
+        "• window और group:tag दोनों जाँचे जाते हैं — गलत होने पर जोड़ा नहीं जाएगा।\n\n"
         "<i>The bot must be running for schedules to fire.</i>"
     ),
     "settings": (
@@ -315,14 +319,19 @@ COMMAND_GUIDES: dict[str, str] = {
         "<b>/files — recent outputs</b>\n\n"
         "<b>Usage</b>\n"
         "<code>/files</code>\n\n"
-        "Lists recent digests with a button to resend any of them."
+        "Lists recent digests with a button to resend any of them, plus the total\n"
+        "count and size. /clean से पुरानी files हटाएँ।"
     ),
     "clean": (
-        "<b>/clean — delete old outputs</b>\n\n"
+        "<b>/clean — delete stored files</b>\n\n"
         "<b>Usage</b>\n"
-        "<code>/clean</code>\n\n"
-        "Asks for confirmation, then deletes output files older than\n"
-        "<code>retention_days</code>. Only the configured output folder is touched."
+        "<code>/clean</code> — older than <code>retention_days</code>\n"
+        "<code>/clean 3d</code> (or <code>/clean 3</code>) — older than 3 days\n"
+        "<code>/clean all</code> — <b>every</b> digest file, right now\n\n"
+        "पहले दिखाता है कि कौन-सी files जाएँगी (नाम, size, कुल) — फिर confirmation माँगता है।\n"
+        "हटाने के बाद बताता है कितनी हटीं और कितनी जगह खाली हुई।\n\n"
+        "<b>Example</b>\n"
+        "<code>/clean all</code>"
     ),
     "find": (
         "<b>/find — search saved digests</b>\n\n"

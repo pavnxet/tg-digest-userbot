@@ -166,3 +166,86 @@ def test_file_commands_owner_guarded(tmp_path):
         asyncio.run(app.handle(event))
         assert event.replies == []
     assert bot.sent == []
+
+
+# --------------------------------------------------------------------------
+# /clean: preview details, /clean all, /clean <N>d
+# --------------------------------------------------------------------------
+def _confirm(app, bot):
+    """Press confirm on the last confirmation prompt."""
+    token = list(app._pending)[0]
+    asyncio.run(app.handle_callback(FakeCallbackEvent(bot, f"confirm:{token}".encode(), OWNER)))
+
+
+def test_clean_preview_shows_count_size_and_names(tmp_path):
+    app, bot, *_ = _app(tmp_path)
+    out = tmp_path / "output"
+    _digest(out / "digest_old.json", [], 1)
+    _digest(out / "digest_new.json", [], 1)
+    _old(out / "digest_old.json", 10)          # older than the 7-day default
+    asyncio.run(app.handle(FakeEvent(bot, "/clean", OWNER)))
+    text = _texts(bot)[-1]
+    assert "1 file" in text
+    assert "digest_old.json" in text
+    assert "digest_new.json" not in text
+    assert "हटाएँ?" in text
+
+
+def test_clean_all_previews_every_file(tmp_path):
+    app, bot, *_ = _app(tmp_path)
+    out = tmp_path / "output"
+    _digest(out / "digest_a.json", [], 1)
+    _digest(out / "digest_b.json", [], 1)
+    asyncio.run(app.handle(FakeEvent(bot, "/clean all", OWNER)))
+    text = _texts(bot)[-1]
+    assert "2 file" in text and "सभी" in text
+
+
+def test_clean_all_deletes_everything_after_confirmation(tmp_path):
+    app, bot, *_ = _app(tmp_path)
+    out = tmp_path / "output"
+    _digest(out / "digest_a.json", [], 1)
+    _digest(out / "digest_b.json", [], 1)
+    asyncio.run(app.handle(FakeEvent(bot, "/clean all", OWNER)))
+    _confirm(app, bot)
+    assert list(out.glob("digest_*")) == []
+    assert "2 file(s) हटाईं" in _texts(bot)[-1]
+
+
+def test_clean_with_an_explicit_day_count(tmp_path):
+    app, bot, *_ = _app(tmp_path)
+    out = tmp_path / "output"
+    _digest(out / "digest_old.json", [], 1)
+    _digest(out / "digest_new.json", [], 1)
+    _old(out / "digest_old.json", 5)
+    asyncio.run(app.handle(FakeEvent(bot, "/clean 3d", OWNER)))
+    text = _texts(bot)[-1]
+    assert "digest_old.json" in text and "digest_new.json" not in text
+
+
+def test_clean_with_nothing_to_delete(tmp_path):
+    app, bot, *_ = _app(tmp_path)
+    asyncio.run(app.handle(FakeEvent(bot, "/clean", OWNER)))
+    assert "कोई file नहीं मिली" in _texts(bot)[-1]
+
+
+def test_clean_rejects_a_bad_argument(tmp_path):
+    app, bot, *_ = _app(tmp_path)
+    asyncio.run(app.handle(FakeEvent(bot, "/clean banana", OWNER)))
+    assert "उपयोग" in _texts(bot)[-1]
+
+
+def test_days_arg_helper():
+    from bot_files import _days_arg
+
+    assert _days_arg("3d") == 3
+    assert _days_arg("3") == 3
+    assert _days_arg("banana") is None
+
+
+def test_files_shows_the_total(tmp_path):
+    app, bot, *_ = _app(tmp_path)
+    out = tmp_path / "output"
+    _digest(out / "digest_a.json", [], 1)
+    asyncio.run(app.handle(FakeEvent(bot, "/files", OWNER)))
+    assert "1 file(s)" in _texts(bot)[-1]

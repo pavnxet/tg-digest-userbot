@@ -738,6 +738,9 @@ https://t.me/somechannel | Some Channel
     <span class="code-block"><span class="c"># today's messages, only the "jobs" group, skip short posts, no file</span>
 /run today group:jobs min:40 send:no
 
+<span class="c"># the window can go anywhere in the line</span>
+/run channel:5 3d
+
 <span class="c"># an explicit IST range</span>
 /run 2026-10-17 06:00 2026-10-18 18:00</span>
 
@@ -777,6 +780,7 @@ https://t.me/somechannel | Some Channel
     <!-- ============ 7 ============ -->
     <div id="s7" class="sec-head"><span class="sec-head__num">07</span><h2>Schedules</h2></div>
     <p class="lead">A schedule runs a digest for you every day at a fixed IST time. You can keep up to five.</p>
+    <p><code>/schedule list</code> shows each entry's scope (all channels or a tag), whether it is paused, when it fires <strong>next</strong> (with a countdown) and when it last fired. Both the window and the <code>group:&lt;tag&gt;</code> are validated when you add one, so a typo cannot create a schedule that silently does nothing.</p>
     <span class="code-block"><span class="c"># every day at 9:00 IST, today's messages</span>
 /schedule add 09:00 today
 
@@ -850,11 +854,18 @@ https://t.me/somechannel | Some Channel
     <div id="s10" class="sec-head"><span class="sec-head__num">10</span><h2>Files &amp; search</h2></div>
     <div class="card-grid">
       <div class="card" style="--i:0"><div class="pipe-step__k">/files</div><p style="margin:0">Lists recent digests (name, size, time, message count) with a button to resend any of them.</p></div>
-      <div class="card" style="--i:1"><div class="pipe-step__k">/clean</div><p style="margin:0">Deletes output files older than <code>retention_days</code>, after a confirmation.</p></div>
+      <div class="card" style="--i:1"><div class="pipe-step__k">/clean</div><p style="margin:0">Deletes stored digests — <code>/clean</code> (older than <code>retention_days</code>), <code>/clean 3d</code>, or <code>/clean all</code> for everything, right now. Always shows what will go first.</p></div>
       <div class="card" style="--i:2"><div class="pipe-step__k">/find</div><p style="margin:0">Searches saved digests <em>locally</em> — no Telegram call, works with Hindi text. Up to 10 matches with links.</p></div>
     </div>
-    <span class="code-block"><span class="c"># find a keyword in the last 24 hours of digests</span>
+    <span class="code-block"><span class="c"># delete every stored digest immediately</span>
+/clean all
+
+<span class="c"># delete only files older than 3 days</span>
+/clean 3d
+
+<span class="c"># find a keyword in the last 24 hours of digests</span>
 /find admit-card 24h</span>
+    <p>Before deleting anything, <code>/clean</code> lists the exact files, their sizes and the total, and waits for a confirmation button. Afterwards it reports how many went and how much space was freed.</p>
     <p>Retention also runs automatically: at startup and once a day, files older than <code>retention_days</code> in the output folder are removed. It only ever touches that folder, and never follows a symlink out of it.</p>
 
     <!-- ============ 11 ============ -->

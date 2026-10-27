@@ -12,7 +12,17 @@ from timeutil import get_tz, parse_local_datetime
 
 WINDOW_TOKENS = ("today", "yesterday", "6h", "24h", "3d", "since-last", "all")
 DURATIONS = ("6h", "24h", "3d")
-_DT = re.compile(r"^\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\s+(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\s*(.*)$")
+_WINDOW_FLAGS = {
+    "today": ["--today"],
+    "yesterday": ["--yesterday"],
+    "since-last": ["--since-last-run"],
+    "all": ["--all-history"],
+}
+_DT_ANY = re.compile(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\s+(\d{4}-\d{2}-\d{2} \d{2}:\d{2})")
+WINDOW_HELP = (
+    "window में से एक: today · yesterday · 6h · 24h · 3d · since-last · all\n"
+    "या दो तारीख़ें: 2026-10-17 06:00 2026-10-18 18:00"
+)
 
 
 class ArgError(Exception):
@@ -20,34 +30,40 @@ class ArgError(Exception):
 
 
 def parse_window(text: str, tz=None) -> tuple[list[str], str]:
-    """Return (argv fragment for the window, remaining text)."""
+    """Return (argv fragment for the window, remaining text).
+
+    The window may appear **anywhere**, so `/run 3d channel:5` and
+    `/run channel:5 3d` both work -- people type it both ways, and rejecting the
+    second form was confusing.
+    """
     text = text.strip()
-    match = _DT.match(text)
+    if not text:
+        raise ArgError("window नहीं दिया। उदाहरण: /run today")
+
+    # An explicit IST range is two datetimes; accept them wherever they are.
+    match = _DT_ANY.search(text)
     if match:
-        start, end, rest = match.group(1), match.group(2), match.group(3)
+        start, end = match.group(1), match.group(2)
         tz = tz or get_tz()
         try:
-            parse_local_datetime(start, tz)  # validate
+            parse_local_datetime(start, tz)   # validate
             parse_local_datetime(end, tz)
         except ValueError as exc:
             raise ArgError(f"तारीख़ गलत: {exc}") from exc
+        rest = (text[: match.start()] + " " + text[match.end():]).strip()
         return ["--since", start, "--until", end], rest
-    parts = text.split(None, 1)
-    if not parts:
-        raise ArgError("window नहीं दिया। उदाहरण: /run today")
-    token = parts[0].lower()
-    rest = parts[1] if len(parts) > 1 else ""
-    if token == "today":  # nosec B105 - a window keyword, not a password
-        return ["--today"], rest
-    if token == "yesterday":  # nosec B105 - window keyword
-        return ["--yesterday"], rest
-    if token in DURATIONS:
-        return ["--last", token], rest
-    if token == "since-last":  # nosec B105 - window keyword
-        return ["--since-last-run"], rest
-    if token == "all":  # nosec B105 - window keyword (the channel's full history)
-        return ["--all-history"], rest
-    raise ArgError("window: today | yesterday | 6h | 24h | 3d | since-last | all | <YYYY-MM-DD HH:MM> x2")
+
+    words = text.split()
+    for index, word in enumerate(words):
+        low = word.lower()
+        fragment = _WINDOW_FLAGS.get(low)
+        if fragment is None and low in DURATIONS:
+            fragment = ["--last", low]
+        if fragment is not None:
+            rest = " ".join(words[:index] + words[index + 1:]).strip()
+            return list(fragment), rest
+
+    raise ArgError("window नहीं मिला।\n" + WINDOW_HELP + "\nउदाहरण: /run 3d channel:5")
 
 
 def _int(value: str, lo: int, hi: int, name: str) -> int:

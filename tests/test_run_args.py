@@ -120,3 +120,42 @@ def test_as_run_flags(tmp_path):
     store.set("with_views", "on")
     flags = store.as_run_flags()
     assert "--dedupe" in flags and "--with-views" in flags
+
+
+# --------------------------------------------------------------------------
+# The window may appear anywhere (people type it both ways)
+# --------------------------------------------------------------------------
+@pytest.mark.parametrize("text,expected", [
+    ("3d channel:5", (["--last", "3d"], "channel:5")),
+    ("channel:5 3d", (["--last", "3d"], "channel:5")),
+    ("today", (["--today"], "")),
+    ("group:news 24h dedupe", (["--last", "24h"], "group:news dedupe")),
+    ("all", (["--all-history"], "")),
+    ("dedupe since-last", (["--since-last-run"], "dedupe")),
+])
+def test_parse_window_accepts_the_window_anywhere(text, expected):
+    assert parse_window(text) == expected
+
+
+def test_parse_window_accepts_a_date_range_anywhere():
+    argv, rest = parse_window("channel:5 2026-10-17 06:00 2026-10-18 18:00")
+    assert argv == ["--since", "2026-10-17 06:00", "--until", "2026-10-18 18:00"]
+    assert rest == "channel:5"
+
+
+def test_the_reported_failing_command_now_works(settings):
+    def writer(token):
+        return "/tmp/subset.txt", None
+
+    argv, _send = build_argv("channel:5 3d", settings, subset_writer=writer)
+    assert "--last" in argv and "3d" in argv
+    assert "--channels-file" in argv
+
+
+def test_missing_window_error_is_actionable():
+    with pytest.raises(ArgError) as exc:
+        parse_window("channel:5")
+    message = str(exc.value)
+    assert "window" in message
+    assert "उदाहरण" in message        # shows a working example
+    assert "3d" in message            # lists the valid windows

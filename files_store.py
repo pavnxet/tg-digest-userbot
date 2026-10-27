@@ -66,19 +66,34 @@ def list_outputs(output_dir: Path) -> list[FileInfo]:
     return infos
 
 
+def files_to_clean(output_dir: Path, days: Optional[int], now: Optional[float] = None) -> list[FileInfo]:
+    """The files /clean would delete. ``days=None`` means every digest file."""
+    output_dir = Path(output_dir)
+    if days is None:
+        return list_outputs(output_dir)
+    cutoff = (now if now is not None else datetime.now(get_tz()).timestamp()) - days * 86400
+    return [info for info in list_outputs(output_dir) if info.mtime < cutoff]
+
+
+def delete_files(infos: list[FileInfo]) -> tuple[list[str], int]:
+    """Delete the given files. Returns (deleted names, bytes freed)."""
+    names: list[str] = []
+    freed = 0
+    for info in infos:
+        try:
+            info.path.unlink()
+        except OSError:
+            _log.warning("could not delete an output file")
+            continue
+        names.append(info.name)
+        freed += info.size
+    return names, freed
+
+
 def clean_older_than(output_dir: Path, days: int, now: Optional[float] = None) -> list[str]:
     """Delete digest_* files older than `days`. Returns the deleted names."""
-    output_dir = Path(output_dir)
-    cutoff = (now if now is not None else datetime.now(get_tz()).timestamp()) - days * 86400
-    deleted = []
-    for info in list_outputs(output_dir):
-        if info.mtime < cutoff:
-            try:
-                info.path.unlink()
-                deleted.append(info.name)
-            except OSError:
-                _log.warning("could not delete an old output file")
-    return deleted
+    names, _freed = delete_files(files_to_clean(output_dir, days, now))
+    return names
 
 
 def _normalise(text: str) -> str:

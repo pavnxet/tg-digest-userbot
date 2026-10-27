@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
+from run_args import WINDOW_TOKENS
 from timeutil import get_tz
 
 _log = logging.getLogger("tgdigest.bot.schedule")
@@ -67,6 +68,8 @@ class ScheduleStore:
             return False, "समय HH:MM (IST) में दें, जैसे 09:00।"
         if not window:
             return False, "window चाहिए, जैसे today या 24h।"
+        if window not in WINDOW_TOKENS:
+            return False, "window गलत है। इनमें से एक: " + " · ".join(WINDOW_TOKENS)
         if len(self._items) >= MAX_SCHEDULES:
             return False, f"अधिकतम {MAX_SCHEDULES} schedules अनुमत हैं।"
         self._items.append(Schedule(time=time, window=window, tag=tag))
