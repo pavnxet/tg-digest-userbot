@@ -198,3 +198,13 @@ def test_a_stranger_cannot_lock_the_real_owner_out(tmp_path):
     assert owners.claim_locked(STRANGER) is True
     assert owners.claim_locked(OWNER) is False
     assert owners.claim(OWNER, code) is True        # the real owner still gets in
+
+
+def test_claim_failure_map_stays_bounded(tmp_path):
+    from owner import OwnerStore
+
+    owners = OwnerStore(tmp_path / "owner.json")
+    owners.start_pairing()
+    for uid in range(500):
+        owners.claim(uid, "wrong")
+    assert len(owners._claim_failures) <= 200

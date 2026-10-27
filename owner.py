@@ -107,6 +107,9 @@ class OwnerStore:
             _log.error("too many failed pairing attempts from one sender; refusing")
             return False
         if not secrets.compare_digest((code or "").strip().lower(), self._code):
+            if len(self._claim_failures) >= 200 and int(user_id) not in self._claim_failures:
+                # Keep the map bounded; a brand-new sender beyond this is not tracked.
+                self._claim_failures.pop(next(iter(self._claim_failures)))
             self._claim_failures[int(user_id)] = self.claim_failures_for(user_id) + 1
             # Count only -- never the code, never the sender's identity.
             _log.warning(

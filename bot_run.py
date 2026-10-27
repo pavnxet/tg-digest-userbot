@@ -145,6 +145,11 @@ class RunPanel:
         if len(matches) > 1:
             numbers = ", ".join(str(e.index) for e in matches[:8])
             return None, f"{target} कई चैनलों से मिलता है ({numbers})। नंबर दें: /history <#>"
+        if matches[0].paused:
+            return None, (
+                f"#{matches[0].index} paused है — पहले /resume {matches[0].index} भेजें, "
+                "फिर /history चलाएँ।"
+            )
         path = self.cache_dir / "history_channel.txt"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(matches[0].raw + "\n", encoding="utf-8")

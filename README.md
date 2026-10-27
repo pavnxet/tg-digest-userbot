@@ -4,7 +4,7 @@
 [![CI](https://github.com/pavnxet/tg-digest-userbot/actions/workflows/ci.yml/badge.svg)](https://github.com/pavnxet/tg-digest-userbot/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Telethon](https://img.shields.io/badge/telethon-1.45-2CA5E0)](https://github.com/LonamiWebs/Telethon)
-[![Tests](https://img.shields.io/badge/tests-530_passing-5f7a4f)](https://pavnxet.github.io/tg-digest-userbot/)
+[![Tests](https://img.shields.io/badge/tests-660_passing-5f7a4f)](https://pavnxet.github.io/tg-digest-userbot/)
 [![User client](https://img.shields.io/badge/user_client-read--only-1f1e1d)](https://pavnxet.github.io/tg-digest-userbot/#s13)
 
 > **📖 New here?** The **[full command guide](https://pavnxet.github.io/tg-digest-userbot/)** walks through

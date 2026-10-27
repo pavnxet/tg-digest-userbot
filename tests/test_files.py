@@ -313,3 +313,13 @@ def test_stale_delete_button_says_so(tmp_path):
     app, bot, *_ = _app(tmp_path)
     asyncio.run(app.handle_callback(FakeCallbackEvent(bot, b"del:expired", OWNER)))
     assert "पुराना" in _texts(bot)[-1]
+
+
+def test_clean_rejects_zero_days(tmp_path):
+    # "0 days" would mean everything; /clean all is the explicit way to say that.
+    app, bot, *_ = _app(tmp_path)
+    out = tmp_path / "output"
+    _digest(out / "digest_a.json", [], 1)
+    asyncio.run(app.handle(FakeEvent(bot, "/clean 0", OWNER)))
+    assert "उपयोग" in _texts(bot)[-1]
+    assert (out / "digest_a.json").exists()

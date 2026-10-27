@@ -160,12 +160,13 @@ class FilePanel:
             days = None
         elif arg:
             parsed = _days_arg(arg)
-            if parsed is None or not (0 <= parsed <= 3650):
+            if parsed is None or not (1 <= parsed <= 3650):
+                # 0 days would mean \"everything\", which /clean all says explicitly.
                 await self.app._respond(
                     event,
                     "उपयोग:\n"
                     f"/clean — {int(self.settings.get('retention_days'))} दिन से पुरानी files\n"
-                    "/clean 3d या /clean 3 — 3 दिन से पुरानी\n"
+                    "/clean 3d या /clean 3 — 3 दिन से पुरानी (1 से 3650)\n"
                     "/clean all — सारी digest files (तुरंत)",
                 )
                 return

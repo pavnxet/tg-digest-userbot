@@ -270,3 +270,11 @@ def test_channels_file_arg_helper():
     assert _channels_file_arg(["--all-history", "--channels-file", "/tmp/x.txt"]) == "/tmp/x.txt"
     assert _channels_file_arg(["--today"]) is None
     assert _channels_file_arg(["--channels-file"]) is None
+
+
+def test_history_refuses_a_paused_channel(tmp_path):
+    app, bot, calls = _panel(tmp_path, "@p | Paused | off\n@q | Q\n")
+    asyncio.run(app.handle(FakeEvent(bot, "/history 1", OWNER)))
+    assert not calls, "a paused channel must not start a run"
+    text = bot.all_text()
+    assert "paused" in text and "/resume 1" in text

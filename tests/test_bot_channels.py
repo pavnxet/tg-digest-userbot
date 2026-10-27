@@ -242,3 +242,47 @@ def test_channels_shows_a_resolved_title_and_caches_it(tmp_path):
     _run(app.handle(FakeEvent(bot, "/channels", OWNER)))
     assert "Maths Daily" in _texts(bot)[-1]
     assert (tmp_path / "cache" / "channel_titles.json").exists()
+
+
+# --------------------------------------------------------------------------
+# Bug hunt: the session must never be touched while a scrape is running
+# --------------------------------------------------------------------------
+def _fake_running(app):
+    from types import SimpleNamespace
+
+    app._run_panel.rm._proc = SimpleNamespace(returncode=None, pid=4242)
+
+
+def test_channels_does_not_touch_the_session_while_a_run_is_active(tmp_path):
+    from types import SimpleNamespace
+
+    script = tmp_path / "fake_main.py"
+    script.write_text("pass\n", encoding="utf-8")
+    app, bot, user, owners, session = build_app(
+        tmp_path, channels_text="-1001234567890\n", run_script=script,
+    )
+    user.entities[-1001234567890] = SimpleNamespace(id=1, title="X")
+    _fake_running(app)
+    before = len(user.calls)
+    _run(app.handle(FakeEvent(bot, "/channels", OWNER)))
+    assert user.calls[before:] == []          # no connect / get_entity / disconnect
+
+
+def test_add_while_a_run_is_active_asks_instead_of_connecting(tmp_path):
+    script = tmp_path / "fake_main.py"
+    script.write_text("pass\n", encoding="utf-8")
+    app, bot, user, owners, session = build_app(tmp_path, channels_text="@a\n", run_script=script)
+    _fake_running(app)
+    before = len(user.calls)
+    _run(app.handle(FakeEvent(bot, "/add -1001234567890", OWNER)))
+    assert user.calls[before:] == []
+    assert app._pending                       # it asked "add anyway" instead
+
+
+def test_ambiguous_remove_tokens_stay_bounded(tmp_path):
+    app, bot, user, owners, session = build_app(
+        tmp_path, channels_text="\n".join(f"@c{i} | Dup" for i in range(30)) + "\n",
+    )
+    for _ in range(15):
+        _run(app.handle(FakeEvent(bot, "/remove Dup", OWNER)))
+    assert len(app._channel_panel._picks) <= 200

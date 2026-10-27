@@ -183,6 +183,13 @@ class BotApp:
             self._health_panel = HealthPanel(self, run_manager, output_dir, cache_dir, schedule_store)
 
     # ------------------------------------------------------------------ guard
+    @property
+    def run_active(self) -> bool:
+        """True while a scrape is running, so panels never touch the user session."""
+        panel = getattr(self, "_run_panel", None)
+        manager = getattr(panel, "rm", None) if panel is not None else None
+        return bool(manager is not None and manager.running)
+
     async def handle(self, event: Any) -> None:
         """Message entry point. Owner-checked; groups/channels ignored."""
         if not getattr(event, "is_private", False):

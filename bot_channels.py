@@ -100,7 +100,13 @@ class ChannelPanel:
         return str(title) if title else None
 
     async def _refresh_titles(self, entries: list, limit: int = 10) -> None:
-        """Best-effort: resolve names for unnamed entries, at most `limit` per call."""
+        """Best-effort: resolve names for unnamed entries, at most `limit` per call.
+
+        Never runs while a scrape is active: two processes on one SQLite session
+        is exactly what the architecture forbids.
+        """
+        if getattr(self.app, "run_active", False):
+            return
         missing = [
             e for e in entries
             if not e.label and e.spec.kind != "invalid" and e.spec.value not in self._titles
@@ -176,6 +182,10 @@ class ChannelPanel:
         if spec is None or spec.kind == "invalid":
             return None
         info = {"spec": spec, "title": None, "member": None, "id": None, "unverified": False}
+        if getattr(self.app, "run_active", False):
+            # A scrape owns the session right now; verify later instead of fighting it.
+            info["unverified"] = True
+            return info
         try:
             await self.app.user.connect()
         except Exception:  # noqa: BLE001
@@ -277,11 +287,15 @@ class ChannelPanel:
             await self.app._respond(event, "❌ कुछ नहीं मिला। /channels से नंबर देखें।")
             return
         if len(matches) > 1:
+            now = time.time()
+            self._picks = {k: v for k, v in self._picks.items() if v[1] > now}   # prune expired
             buttons = []
             for match in matches:
                 token = secrets.token_urlsafe(6)
-                self._picks[token] = (match.raw, time.time() + PICK_TTL_SECONDS)
+                self._picks[token] = (match.raw, now + PICK_TTL_SECONDS)
                 buttons.append([Button.inline(f"#{match.index} {match.spec.value}", f"rm:{token}".encode())])
+            while len(self._picks) > 200:          # cap *after* adding this batch
+                self._picks.pop(next(iter(self._picks)))
             await self.app._respond(event, "कौन सा हटाएँ? / Which one?", buttons=buttons)
             return
         entry = matches[0]
