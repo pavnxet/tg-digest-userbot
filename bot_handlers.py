@@ -290,7 +290,11 @@ class BotApp:
         kind, _, token = data.decode("utf-8").partition(":")
         pending = self._pending.pop(token, None)
         if pending is None:
-            await self._respond(event, "यह confirmation पहले ही इस्तेमाल हो चुका है।")
+            await self._respond(
+                event,
+                "यह button पहले ही इस्तेमाल हो चुका है (या 60 सेकंड में expire हो गया)।\n"
+                "command फिर से भेजें।",
+            )
             return
         if time.time() > pending.expires_at:
             await self._respond(event, "confirmation expire हो गया (60s)। फिर से भेजें।")

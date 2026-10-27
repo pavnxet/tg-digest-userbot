@@ -2,7 +2,7 @@
 import asyncio
 from datetime import datetime
 
-from fake_bot_client import FakeEvent, build_app
+from fake_bot_client import FakeCallbackEvent, FakeEvent, build_app
 from schedule_store import ScheduleStore
 from timeutil import get_tz
 
@@ -235,3 +235,56 @@ def test_duplicate_time_is_rejected(tmp_path):
     assert ok is False
     assert "पहले से" in message
     assert len(store.all()) == 1
+
+
+# --------------------------------------------------------------------------
+# The reported bug: removing by number after the list shifted
+# --------------------------------------------------------------------------
+def test_remove_by_time_is_stable_after_a_shift(tmp_path):
+    store = ScheduleStore(tmp_path / "schedule.json")
+    store.add("09:00", "today")
+    store.add("09:10", "today")
+    store.remove(1)                       # 09:10 is now #1
+    assert store.index_of("09:10") == 1
+    assert store.index_of("1") == 1
+    assert store.index_of("09:00") is None   # it is gone
+
+
+def test_remove_confirmation_survives_a_shifted_index(tmp_path):
+    app, bot, user, owners, session = _app(tmp_path)
+    asyncio.run(app.handle(FakeEvent(bot, "/schedule add 09:00 today", OWNER)))
+    asyncio.run(app.handle(FakeEvent(bot, "/schedule add 09:10 today", OWNER)))
+    asyncio.run(app.handle(FakeEvent(bot, "/schedule remove 1", OWNER)))   # prompt for 09:00
+    token = list(app._pending)[0]
+    app._schedule_panel.store.remove(1)   # the list shifts underneath
+    asyncio.run(app.handle_callback(FakeCallbackEvent(bot, f"confirm:{token}".encode(), OWNER)))
+    remaining = [s.time for s in app._schedule_panel.store.all()]
+    assert remaining == [] or "09:00" not in remaining
+
+
+def test_remove_by_number_says_how_many_exist(tmp_path):
+    store = ScheduleStore(tmp_path / "schedule.json")
+    store.add("09:00", "today")
+    ok, message = store.remove(3)
+    assert ok is False
+    assert "#3 नहीं है" in message and "1 schedule" in message
+
+
+def test_remove_shows_the_updated_list(tmp_path):
+    app, bot, user, owners, session = _app(tmp_path)
+    asyncio.run(app.handle(FakeEvent(bot, "/schedule add 09:00 today", OWNER)))
+    asyncio.run(app.handle(FakeEvent(bot, "/schedule add 09:10 today", OWNER)))
+    asyncio.run(app.handle(FakeEvent(bot, "/schedule remove 09:00", OWNER)))
+    token = list(app._pending)[0]
+    asyncio.run(app.handle_callback(FakeCallbackEvent(bot, f"confirm:{token}".encode(), OWNER)))
+    text = _texts(bot)[-1]
+    assert "हटा दिया" in text
+    assert "Schedules — 1/5" in text      # the new list, with the new numbering
+
+
+def test_pause_names_the_schedule(tmp_path):
+    store = ScheduleStore(tmp_path / "schedule.json")
+    store.add("09:10", "today")
+    ok, message = store.set_paused(1, True)
+    assert ok is True
+    assert "09:10" in message and "pause" in message

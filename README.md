@@ -249,7 +249,9 @@ python main.py --all-history --channels-file one_channel.txt
 
 ### Schedules (IST, max 5)
 `/schedule add <HH:MM> <window> [group:<tag>]`, `/schedule list`,
-`/schedule remove <n>` (confirms), `/schedule pause <n>`, `/schedule resume <n>`.
+`/schedule remove <n | HH:MM>` (confirms), `/schedule pause <n | HH:MM>`,
+`/schedule resume <n | HH:MM>`. The time form is stable — numbers shift after a
+removal — and every change shows you the updated list.
 `/schedule list` shows, for each entry, its scope (all channels or a tag), whether
 it is paused, when it will fire **next** (with a countdown) and when it last fired.
 The window and the `group:<tag>` are both validated on `add`, so a typo cannot

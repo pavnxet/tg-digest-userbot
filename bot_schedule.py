@@ -47,7 +47,7 @@ class SchedulePanel:
             lines.append(f"   अगली बार: {self._describe(self._next_time(item, now), now)}")
             if item.last_fired:
                 lines.append(f"   पिछली बार: {item.last_fired} ✅")
-        lines += ["", "बदलें: /schedule remove <n> · pause <n> · resume <n>"]
+        lines += ["", "बदलें: /schedule remove|pause|resume <n | HH:MM>"]
         return "\n".join(lines)
 
     @staticmethod
@@ -97,28 +97,54 @@ class SchedulePanel:
             ok, message = self.store.add(time, window, tag)
             await self.app._respond(event, ("✅ " if ok else "❌ ") + message)
         elif sub == "remove":
-            index = self._index(rest)
+            index = self.store.index_of(rest)
             if index is None:
-                await self.app._respond(event, "उपयोग: /schedule remove <n>")
+                await self.app._respond(
+                    event, self._missing(rest) + "\n\n" + self._render(),
+                )
                 return
-            await self.app.ask_confirmation(event, f"Schedule #{index} हटाएँ?", "schedule_remove", {"index": index})
+            item = self.store.all()[index - 1]
+            # Bind the confirmation to the schedule itself, not to its number:
+            # numbers shift as soon as one is removed.
+            await self.app.ask_confirmation(
+                event,
+                f"Schedule #{index} ({item.time} — {item.window}) हटाएँ?",
+                "schedule_remove",
+                {"time": item.time},
+            )
         elif sub in ("pause", "resume"):
-            index = self._index(rest)
+            index = self.store.index_of(rest)
             if index is None:
-                await self.app._respond(event, f"उपयोग: /schedule {sub} <n>")
+                await self.app._respond(
+                    event, self._missing(rest) + "\n\n" + self._render(),
+                )
                 return
             ok, message = self.store.set_paused(index, sub == "pause")
             await self.app._respond(event, ("✅ " if ok else "❌ ") + message)
         else:
             await self.app._respond(event, "उपयोग: /schedule add|list|remove|pause|resume")
 
-    def _index(self, text: str) -> Optional[int]:
-        text = text.strip().lstrip("#")
-        return int(text) if text.isdigit() else None
+    def _missing(self, rest: str) -> str:
+        """A clear reason for an identifier that matches nothing."""
+        text = (rest or "").strip().lstrip("#")
+        if text.isdigit():
+            return f"❌ #{text} नहीं है — अभी {len(self.store.all())} schedule हैं।"
+        return f"❌ '{text}' समय का कोई schedule नहीं है।"
 
     async def _do_remove(self, event: Any, payload: dict) -> None:
-        ok, message = self.store.remove(int(payload["index"]))
-        await self.app._respond(event, ("✅ " if ok else "❌ ") + message)
+        # Re-resolve by time: the list may have changed since the prompt.
+        index = self.store.index_of(str(payload.get("time", "")))
+        if index is None:
+            await self.app._respond(
+                event, "❌ वह schedule अब नहीं है।\n\n" + self._render(),
+            )
+            return
+        ok, message = self.store.remove(index)
+        if not ok:
+            await self.app._respond(event, "❌ " + message)
+            return
+        # Show the new list, so the numbers you see are the numbers that exist.
+        await self.app._respond(event, f"✅ {message}\n\n{self._render()}")
 
 
 class Scheduler:

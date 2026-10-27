@@ -80,19 +80,36 @@ class ScheduleStore:
         self._save()
         return True, "जोड़ दिया। / added."
 
+    def index_of(self, identifier: str) -> Optional[int]:
+        """Resolve `#2`, `2` or `09:10` to a 1-based index (None when absent).
+
+        The time form is the stable one: numbers shift after a removal.
+        """
+        text = (identifier or "").strip().lstrip("#")
+        if not text:
+            return None
+        if text.isdigit():
+            index = int(text)
+            return index if 1 <= index <= len(self._items) else None
+        for index, item in enumerate(self._items, start=1):
+            if item.time == text:
+                return index
+        return None
+
     def remove(self, index: int) -> tuple[bool, str]:
         if not (1 <= index <= len(self._items)):
-            return False, "index गलत है।"
-        self._items.pop(index - 1)
+            return False, f"#{index} नहीं है — अभी {len(self._items)} schedule हैं। /schedule list देखें।"
+        item = self._items.pop(index - 1)
         self._save()
-        return True, "हटा दिया। / removed."
+        return True, f"{item.time} — हटा दिया। / removed."
 
     def set_paused(self, index: int, paused: bool) -> tuple[bool, str]:
         if not (1 <= index <= len(self._items)):
-            return False, "index गलत है।"
-        self._items[index - 1].paused = paused
+            return False, f"#{index} नहीं है — अभी {len(self._items)} schedule हैं। /schedule list देखें।"
+        item = self._items[index - 1]
+        item.paused = paused
         self._save()
-        return True, "ठीक है। / ok."
+        return True, f"{item.time} — " + ("pause कर दिया ⏸" if paused else "फिर से चालू ▶️")
 
     def pause_all(self) -> int:
         for item in self._items:
