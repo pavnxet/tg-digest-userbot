@@ -88,3 +88,19 @@ def test_health_and_panic_are_owner_guarded(tmp_path):
         asyncio.run(app.handle(event))
         assert event.replies == []
     assert bot.sent == []
+
+
+def test_health_reports_channels_that_keep_failing(tmp_path):
+    app, bot, user, owners, session = _app(tmp_path)
+    out = tmp_path / "output"
+    out.mkdir(exist_ok=True)
+    skipped = [{"channel": "@broken", "reason": "not_joined"}]
+    for name in ("digest_a.json", "digest_b.json"):
+        (out / name).write_text(json.dumps({
+            "meta": {"channels_ok": 1, "messages_total": 2, "skipped": skipped},
+            "channels": [],
+        }), encoding="utf-8")
+    asyncio.run(app.handle(FakeEvent(bot, "/health", OWNER)))
+    text = _texts(bot)[-1]
+    assert "repeat failures" in text
+    assert "@broken" in text and "not_joined" in text

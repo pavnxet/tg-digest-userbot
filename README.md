@@ -188,7 +188,7 @@ Everything below is owner-only, private-chat only. Non-owner messages get no rep
 ### Channels
 | Command | What it does |
 |---|---|
-| `/channels [tag]` | List channels (20 per page), with paused/invalid marks. |
+| `/channels [tag\|paused\|invalid]` | List channels (20 per page) with paused/invalid marks; `paused` and `invalid` are filters. Unnamed channels show their resolved title once known. |
 | `/add <link\|@name\|id> [\| label]` | Validate (read-only) and append. Shows title + membership. |
 | `/remove <#\|link\|name>` | Remove, after confirmation. Ambiguous matches ask which. |
 | `/pause <#>` / `/resume <#>` | Mark a line `off` / remove the mark. |
@@ -264,8 +264,8 @@ Keys: `format` (json|jsonl|txt), `dedupe` (on|off), `min_chars` (0-500),
 (0-1440), `retention_days` (1-60), `max_per_channel` (100-20000).
 
 ### Files and search
-`/files` lists recent outputs (with the total count and size) and a button to
-resend any of them.
+`/files` lists recent outputs (with the total count and size) and, for each one, a
+button to resend it and a button to delete it (deleting asks first).
 
 `/clean` deletes stored digests, always showing **what will go** (names, sizes,
 total) before asking for confirmation:

@@ -146,3 +146,56 @@ def test_summary_says_where_the_files_are(tmp_path):
 
     sent = panel._summary(SimpleNamespace(result="ok", duration=12.0), send_files=True)
     assert "/last" not in sent        # no hint when the file was already sent
+
+
+# --------------------------------------------------------------------------
+# Phase 3: the Resume button
+# --------------------------------------------------------------------------
+def _panel(tmp_path):
+    from types import SimpleNamespace
+
+    app, bot, user, owners, session = build_app(tmp_path, run_script=_sleep_script(tmp_path))
+    return app, bot, app._run_panel, SimpleNamespace
+
+
+def test_resume_button_only_when_a_run_did_not_finish(tmp_path):
+    app, bot, panel, ns = _panel(tmp_path)
+    panel._last_argv = ["--today"]
+    assert panel._resume_buttons(ns(result="ok")) is None
+    buttons = panel._resume_buttons(ns(result="timeout"))
+    assert buttons and "Resume" in buttons[0][0].text
+
+
+def test_resume_button_continues_the_same_run(tmp_path):
+    from fake_bot_client import FakeCallbackEvent
+
+    app, bot, panel, ns = _panel(tmp_path)
+    panel._last_argv = ["--last", "3d"]
+    panel._last_send_files = False
+    panel._resume_buttons(ns(result="timeout"))
+    token = next(iter(panel._resume))
+
+    calls = []
+
+    async def fake_start(argv, capture=False, timeout=None):
+        calls.append(list(argv))
+        return None
+
+    async def fake_supervise(chat_id, send_files):
+        return None
+
+    panel.rm.start = fake_start
+    panel._supervise = fake_supervise
+    asyncio.run(app.handle_callback(FakeCallbackEvent(bot, f"resume:{token}".encode(), OWNER)))
+
+    assert calls, "resume should start a run"
+    assert "--resume" in calls[0]
+    assert "--last" in calls[0] and "3d" in calls[0]      # same window as before
+
+
+def test_stale_resume_button_says_so(tmp_path):
+    from fake_bot_client import FakeCallbackEvent
+
+    app, bot, panel, ns = _panel(tmp_path)
+    asyncio.run(app.handle_callback(FakeCallbackEvent(bot, b"resume:expired", OWNER)))
+    assert "पुराना" in _texts(bot)[-1]

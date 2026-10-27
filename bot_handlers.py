@@ -19,6 +19,7 @@ import re
 import secrets
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Optional
 
 from telethon.errors import (
@@ -35,7 +36,7 @@ from telethon.tl.custom import Button
 # Help text and the per-command guides live in bot_help.py, formatted for
 # Telegram's HTML parse mode. Re-exported here so the panels and tests keep
 # importing them from this module.
-from bot_help import COMMAND_GUIDES, GUIDE_COMMANDS, HELP_TEXT, guide_for
+from bot_help import COMMAND_GUIDES, GUIDE_COMMANDS, HELP_TEXT, esc, guide_for
 from login_state import (
     MAX_CODE_ATTEMPTS,
     MAX_PASSWORD_ATTEMPTS,
@@ -132,6 +133,8 @@ class BotApp:
         self.manager = manager or LoginManager()
         self.log = log or _log
         self.channels_store = channels_store
+        # Panels use this for small caches (e.g. resolved channel titles).
+        self.cache_dir = Path(cache_dir) if cache_dir is not None else None
         self._code_times: list[float] = []
         self._pending: dict[str, Pending] = {}
         self._confirm_actions: dict[str, Any] = {}
@@ -317,7 +320,11 @@ class BotApp:
             return
         guide = guide_for(arg)
         if guide is None:
-            await self._respond(event, f"«{arg}» नाम का कोई command नहीं है। /help देखें।")
+            await self._respond(
+                event,
+                f"«{esc(arg)}» नाम का कोई command नहीं है। /help देखें।",
+                parse_mode="html",
+            )
             return
         await self._respond(event, guide, parse_mode="html")
 

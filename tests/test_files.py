@@ -281,3 +281,35 @@ def test_find_with_no_match_suggests_a_bigger_window(tmp_path):
     asyncio.run(app.handle(FakeEvent(bot, "/find nothinghere", OWNER)))
     text = _texts(bot)[-1]
     assert "3d" in text and "/files" in text
+
+
+# --------------------------------------------------------------------------
+# Phase 3: per-file delete button
+# --------------------------------------------------------------------------
+def test_files_delete_button_asks_then_deletes(tmp_path):
+    app, bot, *_ = _app(tmp_path)
+    out = tmp_path / "output"
+    _digest(out / "digest_a.json", [], 1)
+    asyncio.run(app.handle(FakeEvent(bot, "/files", OWNER)))
+    token = next(iter(app._file_panel._files))
+    asyncio.run(app.handle_callback(FakeCallbackEvent(bot, f"del:{token}".encode(), OWNER)))
+    assert "हटाएँ" in _texts(bot)[-1]
+    assert (out / "digest_a.json").exists()          # nothing until confirmed
+    _confirm(app, bot)
+    assert not (out / "digest_a.json").exists()
+    assert "हटाई" in _texts(bot)[-1]
+
+
+def test_delete_file_refuses_a_path_outside_the_output_dir(tmp_path):
+    app, bot, *_ = _app(tmp_path)
+    outside = tmp_path / "outside.json"
+    outside.write_text("{}", encoding="utf-8")
+    asyncio.run(app._file_panel._do_delete_file(FakeEvent(bot, "/x", OWNER), {"path": str(outside)}))
+    assert outside.exists()
+    assert "नहीं है" in _texts(bot)[-1]
+
+
+def test_stale_delete_button_says_so(tmp_path):
+    app, bot, *_ = _app(tmp_path)
+    asyncio.run(app.handle_callback(FakeCallbackEvent(bot, b"del:expired", OWNER)))
+    assert "पुराना" in _texts(bot)[-1]

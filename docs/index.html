@@ -775,6 +775,7 @@ https://t.me/somechannel | Some Channel
       </ul>
     </div>
     <p>From the command line, the equivalent is <code>python main.py --all-history --channels-file one_channel.txt</code>.</p>
+    <p>If a run is stopped, times out or fails, the summary carries a <strong>🔁 Resume</strong> button that continues it from its checkpoint with the same settings — no retyping.</p>
     <p>While a run is going, the bot keeps <strong>one status message</strong> updated (at most every 10 seconds) showing the elapsed time and progress like <code>channel 3/12</code>. When it finishes you get a summary — channels ok, messages, skipped channels and reasons, truncated channels, estimated tokens — and the digest arrives as a document. If there are more than 10 parts it asks before sending.</p>
 
     <!-- ============ 7 ============ -->
@@ -853,7 +854,7 @@ https://t.me/somechannel | Some Channel
     <!-- ============ 10 ============ -->
     <div id="s10" class="sec-head"><span class="sec-head__num">10</span><h2>Files &amp; search</h2></div>
     <div class="card-grid">
-      <div class="card" style="--i:0"><div class="pipe-step__k">/files</div><p style="margin:0">Lists recent digests (name, size, time, message count) with a button to resend any of them.</p></div>
+      <div class="card" style="--i:0"><div class="pipe-step__k">/files</div><p style="margin:0">Lists recent digests (name, size, time, message count) with a button to resend and a button to delete each one.</p></div>
       <div class="card" style="--i:1"><div class="pipe-step__k">/clean</div><p style="margin:0">Deletes stored digests — <code>/clean</code> (older than <code>retention_days</code>), <code>/clean 3d</code>, or <code>/clean all</code> for everything, right now. Always shows what will go first.</p></div>
       <div class="card" style="--i:2"><div class="pipe-step__k">/find</div><p style="margin:0">Searches saved digests <em>locally</em> — no Telegram call, works with Hindi text. Up to 10 matches with links.</p></div>
     </div>

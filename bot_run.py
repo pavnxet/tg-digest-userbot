@@ -11,9 +11,12 @@ import contextlib
 import json
 import logging
 import re
+import secrets
 import time
 from pathlib import Path
 from typing import Any, Optional
+
+from telethon.tl.custom import Button
 
 from config import HISTORY_TIMEOUT_SECONDS
 from run_args import ArgError, build_argv
@@ -22,6 +25,7 @@ _log = logging.getLogger("tgdigest.bot.runpanel")
 
 PROGRESS_INTERVAL = 10
 MAX_AUTO_SEND_PARTS = 10
+RESUME_TTL_SECONDS = 3600.0
 _COUNT_RE = re.compile(r"OK\s+(.+?)\s+\(~(\d+)\s+message")
 
 
@@ -49,6 +53,10 @@ class RunPanel:
         self._autodelete_task: Optional[asyncio.Task] = None
         self._last_all_history = False
         self._run_channels_file: Optional[str] = None
+        self._last_argv: Optional[list[str]] = None
+        self._last_send_files = True
+        self._resume: dict[str, tuple[list[str], bool, float]] = {}
+        app.register_callback_prefix(b"resume:", self._cb_resume)
         app.commands.update({
             "/run": self.cmd_run,
             "/history": self.cmd_history,
@@ -119,6 +127,8 @@ class RunPanel:
         refusal = await self.rm.start(argv, timeout=timeout)
         if refusal is not None:
             return f"❌ {refusal.reason}"
+        self._last_argv = list(argv)
+        self._last_send_files = send_files
         self._last_all_history = "--all-history" in argv
         self._task = asyncio.create_task(self._supervise(chat_id, send_files))
         return None
@@ -216,9 +226,35 @@ class RunPanel:
 
     async def _final(self, chat_id: Any, result: Any, send_files: bool) -> None:
         self._last_outputs = self._new_outputs(result.started_at)
-        await self.app.bot.send_message(chat_id, self._summary(result, send_files))
+        buttons = self._resume_buttons(result)
+        await self.app.bot.send_message(chat_id, self._summary(result, send_files), buttons=buttons)
         if send_files and self._last_outputs:
             await self._send_outputs(chat_id)
+
+    def _resume_buttons(self, result: Any) -> Optional[list]:
+        """Offer a Resume button when a run did not finish (its checkpoint is kept)."""
+        if result.result not in ("timeout", "failed", "stopped") or not self._last_argv:
+            return None
+        token = secrets.token_urlsafe(6)
+        self._resume[token] = (list(self._last_argv), self._last_send_files, time.time() + RESUME_TTL_SECONDS)
+        while len(self._resume) > 10:
+            self._resume.pop(next(iter(self._resume)))
+        return [[Button.inline("🔁 Resume", f"resume:{token}".encode())]]
+
+    async def _cb_resume(self, event: Any, rest: bytes) -> None:
+        """Continue the run this button was made for, from its checkpoint."""
+        token = rest.decode("utf-8", "replace")
+        item = self._resume.pop(token, None)
+        if item is None or time.time() > item[2]:
+            await self.app._respond(event, "यह button पुराना है। /run फिर से भेजें।")
+            return
+        argv, send_files, _expiry = item
+        if self.rm.running:
+            await self.app._respond(event, "एक run पहले से चल रहा है। /stop से रोकें।")
+            return
+        error = await self._start([*argv, "--resume"], send_files, event.chat_id)
+        if error:
+            await self.app._respond(event, error)
 
     def _new_outputs(self, since: float) -> list[Path]:
         files = sorted(self.output_dir.glob("digest_*"), key=lambda p: p.stat().st_mtime)

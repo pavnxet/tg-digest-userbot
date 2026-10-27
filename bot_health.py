@@ -71,6 +71,28 @@ class HealthPanel:
                 pass
         lines.append("skipped (last): " + (", ".join(skipped[:8]) if skipped else "none"))
 
+        # Which channels keep failing, across the recent runs (not just the last).
+        counts: dict[str, int] = {}
+        reasons: dict[str, str] = {}
+        import json as _json
+
+        for info in outputs[:10]:
+            try:
+                meta = _json.loads(info.path.read_text(encoding="utf-8")).get("meta", {})
+            except (OSError, ValueError):
+                continue
+            for item in meta.get("skipped") or []:
+                name = str(item.get("channel") or "?")
+                counts[name] = counts.get(name, 0) + 1
+                reasons.setdefault(name, str(item.get("reason") or "?"))
+        repeated = [(name, n) for name, n in counts.items() if n >= 2]
+        if repeated:
+            repeated.sort(key=lambda pair: -pair[1])
+            lines.append(
+                f"repeat failures (last {min(len(outputs), 10)} runs): "
+                + ", ".join(f"{name}×{n}({reasons[name]})" for name, n in repeated[:5])
+            )
+
         if self.schedule_store is not None:
             nxt = self.schedule_store.next_run()
             lines.append(f"next scheduled: {nxt[1].strftime('%d/%m %H:%M')} ({nxt[0].window})" if nxt else "next scheduled: none")

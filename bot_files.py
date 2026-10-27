@@ -71,6 +71,8 @@ class FilePanel:
         app.commands.update({"/files": self.cmd_files, "/clean": self.cmd_clean, "/find": self.cmd_find})
         app.register_confirmation("clean", self._do_clean)
         app.register_callback_prefix(b"file:", self._cb_file)
+        app.register_callback_prefix(b"del:", self._cb_del)
+        app.register_confirmation("delete_file", self._do_delete_file)
 
     def _arg(self, event: Any) -> str:
         return (getattr(event, "text", "") or "").partition(" ")[2].strip()
@@ -99,13 +101,16 @@ class FilePanel:
         for index, info in enumerate(self._infos, start=1):
             token = secrets.token_urlsafe(6)
             self._files[token] = (str(info.path), now + FILE_TOKEN_TTL)
-            buttons.append([Button.inline(f"📎 {index}", f"file:{token}".encode())])
+            buttons.append([
+                Button.inline(f"📎 {index}", f"file:{token}".encode()),
+                Button.inline(f"🗑 {index}", f"del:{token}".encode()),
+            ])
         await self.app._respond(event, f"📁 Recent outputs — {len(infos)} file(s), {_human_size(total)}:\n" + "\n".join(lines), buttons=buttons)
 
     async def _cb_file(self, event: Any, rest: bytes) -> None:
         """Resend the file this button was created for."""
         token = rest.decode("utf-8", "replace")
-        item = self._files.pop(token, None)
+        item = self._files.get(token)      # not popped: the delete button shares it
         if item is None or time.time() > item[1]:
             await self.app._respond(event, "यह button पुराना है। /files फिर से भेजें।")
             return
@@ -117,6 +122,34 @@ class FilePanel:
             await self.app.bot.send_file(event.chat_id, str(path), caption=path.name)
         except Exception:  # noqa: BLE001
             await self.app._respond(event, "⚠️ भेजने में समस्या। /last से फिर भेजें।")
+
+    async def _cb_del(self, event: Any, rest: bytes) -> None:
+        """Delete the file this button was made for (after a confirmation)."""
+        token = rest.decode("utf-8", "replace")
+        item = self._files.get(token)
+        if item is None or time.time() > item[1]:
+            await self.app._respond(event, "यह button पुराना है। /files फिर से भेजें।")
+            return
+        path = Path(item[0])
+        if not path.exists() or not _safe_in_dir(path, self.output_dir):
+            await self.app._respond(event, "वह file अब मौजूद नहीं है।")
+            return
+        await self.app.ask_confirmation(
+            event, f"{path.name} हटाएँ? / Delete this file?", "delete_file", {"path": str(path)},
+        )
+
+    async def _do_delete_file(self, event: Any, payload: dict) -> None:
+        path = Path(payload.get("path", ""))
+        if not _safe_in_dir(path, self.output_dir):
+            await self.app._respond(event, "❌ यह file output folder में नहीं है।")
+            return
+        try:
+            size = path.stat().st_size
+            path.unlink()
+        except OSError:
+            await self.app._respond(event, "❌ हटाया नहीं जा सका।")
+            return
+        await self.app._respond(event, f"🗑 {path.name} हटाई — {_human_size(size)} खाली हुआ।")
 
     # -- /clean ------------------------------------------------------------
     async def cmd_clean(self, event: Any) -> None:

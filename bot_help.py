@@ -24,7 +24,7 @@ HELP_TEXT = (
     "/cancel — cancel a login\n"
     "\n"
     "<b>Channels</b>\n"
-    "/channels [tag] — list your channels\n"
+    "/channels [tag|paused|invalid] — list your channels\n"
     "/add — add a channel (link, @name or id)\n"
     "/remove · /pause · /resume — edit the list\n"
     "/tag · /untag · /groups — organise by tag\n"
@@ -126,7 +126,10 @@ COMMAND_GUIDES: dict[str, str] = {
         "invalid lines. The <b>number</b> is what other commands take.\n\n"
         "<b>Examples</b>\n"
         "<code>/channels</code>\n"
-        "<code>/channels jobs</code> — only channels tagged <i>jobs</i>"
+        "<code>/channels jobs</code> — only channels tagged <i>jobs</i>\n"
+        "<code>/channels paused</code> — only paused ones\n"
+        "<code>/channels invalid</code> — only lines that will not resolve\n\n"
+        "<i>Unnamed channels show their resolved title once it is known.</i>"
     ),
     "add": (
         "<b>/add — add a channel</b>\n\n"
@@ -360,6 +363,15 @@ COMMAND_GUIDES: dict[str, str] = {
         "<i>Use it if you think your account is compromised.</i>"
     ),
 }
+
+
+def esc(text: object) -> str:
+    """Escape text for Telegram's HTML parse mode.
+
+    Any dynamic value interpolated into a help/guide message must go through
+    this, or a stray '<' or '&' makes Telegram reject the whole message.
+    """
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def guide_for(command: str) -> "str | None":

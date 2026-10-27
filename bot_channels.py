@@ -9,6 +9,8 @@ then never act on a different channel after the list has changed.
 """
 from __future__ import annotations
 
+import contextlib
+import json
 import logging
 import secrets
 import time
@@ -34,6 +36,7 @@ class ChannelPanel:
         self.store = app.channels_store
         self._tags: dict[str, Optional[str]] = {}      # token -> tag filter
         self._picks: dict[str, tuple[str, float]] = {}  # token -> (raw line, expiry)
+        self._titles: dict[str, str] = self._load_titles()
         app.commands.update({
             "/channels": self.cmd_channels,
             "/add": self.cmd_add,
@@ -55,9 +58,68 @@ class ChannelPanel:
 
     def _filtered(self, tag: Optional[str]) -> list:
         entries = self.store.entries()
+        if tag == "paused":          # reserved word: only paused lines
+            return [e for e in entries if e.paused]
+        if tag == "invalid":         # reserved word: only lines that will not resolve
+            return [e for e in entries if e.spec.kind == "invalid"]
         if tag:
             entries = [e for e in entries if tag in e.tags]
         return entries
+
+    # -- resolved titles (a numeric id is unreadable on its own) -----------
+    def _titles_path(self) -> Optional[Any]:
+        base = getattr(self.app, "cache_dir", None)
+        return (base / "channel_titles.json") if base is not None else None
+
+    def _load_titles(self) -> dict[str, str]:
+        path = self._titles_path()
+        if path is None:
+            return {}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        return {str(k): str(v) for k, v in data.items()} if isinstance(data, dict) else {}
+
+    def _save_titles(self) -> None:
+        path = self._titles_path()
+        if path is None:
+            return
+        with contextlib.suppress(OSError):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(self._titles), encoding="utf-8")
+
+    async def _title_for(self, entry: Any) -> Optional[str]:
+        """The chat's display name, or None when it cannot be resolved."""
+        try:
+            key = int(entry.spec.value) if entry.spec.kind == "id" else entry.spec.value
+            entity = await self.app.user.get_entity(key)
+        except Exception:  # noqa: BLE001 - a title is a nicety, never a failure
+            return None
+        title = getattr(entity, "title", None) or getattr(entity, "first_name", None)
+        return str(title) if title else None
+
+    async def _refresh_titles(self, entries: list, limit: int = 10) -> None:
+        """Best-effort: resolve names for unnamed entries, at most `limit` per call."""
+        missing = [
+            e for e in entries
+            if not e.label and e.spec.kind != "invalid" and e.spec.value not in self._titles
+        ][:limit]
+        if not missing:
+            return
+        try:
+            await self.app.user.connect()
+        except Exception:  # noqa: BLE001 - titles are a nicety, never a failure
+            return
+        try:
+            for entry in missing:
+                title = await self._title_for(entry)
+                if title:
+                    self._titles[entry.spec.value] = title
+        finally:
+            with contextlib.suppress(Exception):
+                await self.app.user.disconnect()
+        self._save_titles()
 
     def _token_for(self, tag: Optional[str]) -> str:
         """A short, stable token for a tag filter (callback data is capped at 64B)."""
@@ -75,7 +137,13 @@ class ChannelPanel:
         total_pages = max(1, (len(entries) + PAGE_SIZE - 1) // PAGE_SIZE)
         page = max(0, min(page, total_pages - 1))
         chunk = entries[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]
-        head = f"📋 Channels ({len(entries)}" + (f", tag={tag}" if tag else "") + f") — page {page + 1}/{total_pages}\n"
+        if tag in ("paused", "invalid"):
+            scope = f", {tag}"                     # a filter, not a tag
+        elif tag:
+            scope = f", tag={tag}"
+        else:
+            scope = ""
+        head = f"📋 Channels ({len(entries)}{scope}) — page {page + 1}/{total_pages}\n"
         lines = []
         for entry in chunk:
             marks = []
@@ -84,7 +152,8 @@ class ChannelPanel:
             if entry.spec.kind == "invalid":
                 marks.append("⚠️")
             tags = f" [{' '.join('#' + t for t in entry.tags)}]" if entry.tags else ""
-            label = f" {entry.label}" if entry.label else ""
+            shown = entry.label or self._titles.get(entry.spec.value) or ""
+            label = f" {shown}" if shown else ""
             lines.append(f"{entry.index}. {entry.spec.value}{label}{tags} {' '.join(marks)}".rstrip())
         text = head + "\n".join(lines) if lines else head + "(खाली)"
         if not entries:
@@ -135,6 +204,7 @@ class ChannelPanel:
     # -- commands ----------------------------------------------------------
     async def cmd_channels(self, event: Any) -> None:
         tag = self._arg(event) or None
+        await self._refresh_titles(self.store.entries())
         text, buttons = self._page_view(tag, 0)
         await self.app._respond(event, text, buttons=buttons or None)
 

@@ -144,3 +144,17 @@ def test_guides_are_owner_only(tmp_path):
     app, bot = _app(tmp_path)
     asyncio.run(app.handle(FakeEvent(bot, "/help run", OWNER + 1)))
     assert not bot.sent
+
+
+def test_esc_escapes_markup():
+    from bot_help import esc
+
+    assert esc("a<b&c>d") == "a&lt;b&amp;c&gt;d"
+
+
+def test_help_argument_with_markup_stays_valid_html(tmp_path):
+    app, bot = _app(tmp_path)
+    event = FakeEvent(bot, "/help <b>", OWNER)
+    asyncio.run(app.handle(event))
+    assert "&lt;b&gt;" in bot.sent[-1][1]
+    assert event.parse_modes[-1] == "html"

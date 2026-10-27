@@ -212,3 +212,33 @@ def test_channels_empty_suggests_add(tmp_path):
     app, bot, user, owners, session = build_app(tmp_path, channels_text="# only a comment\n")
     _run(app.handle(FakeEvent(bot, "/channels", OWNER)))
     assert "/add" in _texts(bot)[-1]
+
+
+# --------------------------------------------------------------------------
+# Phase 3: filters and resolved titles
+# --------------------------------------------------------------------------
+def test_channels_paused_filter(tmp_path):
+    app, bot, user, owners, session = build_app(tmp_path, channels_text="@a | A | off\n@b | B\n")
+    _run(app.handle(FakeEvent(bot, "/channels paused", OWNER)))
+    text = _texts(bot)[-1]
+    assert "1." in text and "2." not in text
+
+
+def test_channels_invalid_filter_excludes_valid_lines(tmp_path):
+    app, bot, user, owners, session = build_app(tmp_path, channels_text="@a\n!!!\n")
+    _run(app.handle(FakeEvent(bot, "/channels invalid", OWNER)))
+    assert "@a" not in _texts(bot)[-1]
+
+
+def test_channels_shows_a_resolved_title_and_caches_it(tmp_path):
+    from types import SimpleNamespace
+
+    script = tmp_path / "fake_main.py"
+    script.write_text("pass\n", encoding="utf-8")
+    app, bot, user, owners, session = build_app(
+        tmp_path, channels_text="-1001234567890\n", run_script=script,
+    )
+    user.entities[-1001234567890] = SimpleNamespace(id=-1001234567890, title="Maths Daily")
+    _run(app.handle(FakeEvent(bot, "/channels", OWNER)))
+    assert "Maths Daily" in _texts(bot)[-1]
+    assert (tmp_path / "cache" / "channel_titles.json").exists()
