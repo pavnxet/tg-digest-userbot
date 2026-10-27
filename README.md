@@ -219,6 +219,9 @@ the line (the scraper skips it and reports it as `paused`).
 The window can go **anywhere** in the line, so `/run 3d channel:5` and
 `/run channel:5 3d` both work.
 
+If a run is stopped, times out or fails, the summary carries a **🔁 Resume**
+button that continues it from its checkpoint with the same options.
+
 Limits (to protect the account): one run at a time, minimum 5 minutes between
 runs, maximum 12 runs per day (manual and scheduled share these), 30-minute hard
 timeout. Files are sent as documents; more than 10 parts asks first.

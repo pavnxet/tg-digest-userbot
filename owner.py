@@ -19,6 +19,9 @@ from config import PAIRING_CODE_BYTES
 
 _log = logging.getLogger("tgdigest.bot.owner")
 
+# Wrong guesses are cheap to make, so stop accepting them after a few.
+MAX_CLAIM_ATTEMPTS = 5
+
 
 class OwnerStore:
     """Loads, saves and guards the single owner id."""
@@ -27,6 +30,8 @@ class OwnerStore:
         self.path = Path(path)
         self._code: Optional[str] = None
         self._corrupt = False
+        # Counted per sender, so a stranger cannot lock the real owner out.
+        self._claim_failures: dict[int, int] = {}
         if preset_owner_id is not None:
             self._owner_id: Optional[int] = int(preset_owner_id)
         else:
@@ -70,6 +75,11 @@ class OwnerStore:
     def is_owner(self, user_id: Optional[int]) -> bool:
         return self._owner_id is not None and user_id is not None and int(user_id) == self._owner_id
 
+    def claim_failures_for(self, user_id: Optional[int]) -> int:
+        if user_id is None:
+            return 0
+        return self._claim_failures.get(int(user_id), 0)
+
     def needs_pairing(self) -> bool:
         # A corrupt file must not be treated as "unpaired" (fail closed).
         return self._owner_id is None and not self._corrupt
@@ -81,13 +91,29 @@ class OwnerStore:
             self._code = secrets.token_hex(PAIRING_CODE_BYTES)
         return self._code
 
+    def claim_locked(self, user_id: Optional[int]) -> bool:
+        """True once this sender has tried too many wrong codes."""
+        if user_id is None:
+            return False
+        return self._claim_failures.get(int(user_id), 0) >= MAX_CLAIM_ATTEMPTS
+
     def claim(self, user_id: int, code: str) -> bool:
         """Try to claim ownership. On success the code is consumed forever."""
         if self._owner_id is not None:
             return False
         if not self._code:
             return False
+        if self.claim_locked(user_id):
+            _log.error("too many failed pairing attempts from one sender; refusing")
+            return False
         if not secrets.compare_digest((code or "").strip().lower(), self._code):
+            self._claim_failures[int(user_id)] = self.claim_failures_for(user_id) + 1
+            # Count only -- never the code, never the sender's identity.
+            _log.warning(
+                "failed pairing attempt %d/%d",
+                self._claim_failures[int(user_id)],
+                MAX_CLAIM_ATTEMPTS,
+            )
             return False
         self._code = None  # invalidate immediately, before anything can fail
         self._owner_id = int(user_id)

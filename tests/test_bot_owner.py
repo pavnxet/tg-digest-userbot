@@ -63,13 +63,15 @@ def test_pairing_correct_code_once_then_reused_fails(tmp_path):
     assert OwnerStore(tmp_path / "owner.json").owner_id == 777
 
 
-def test_pairing_wrong_code_fails_silently(tmp_path):
+def test_pairing_wrong_code_never_pairs_and_says_so(tmp_path):
+    # Deliberate change in Phase 4: a wrong code gets a clear reply (the real owner
+    # may have mistyped it). Brute force is stopped by the per-sender cap instead.
     app, bot, user, owners, session = build_app(tmp_path, needs_pairing=True)
     owners.start_pairing()
     event = FakeEvent(bot, "/claim deadbeef", 777)
     asyncio.run(app.handle(event))
     assert not owners.is_owner(777)
-    assert event.replies == []
+    assert event.replies and "Code गलत" in event.replies[-1][0]
 
 
 def test_pairing_code_never_appears_in_chat(tmp_path):
@@ -147,3 +149,52 @@ def test_corrupt_owner_file_ignores_every_command(tmp_path):
     app.owners = owners
     asyncio.run(app.handle(FakeEvent(bot, "/claim abc", STRANGER)))
     assert not bot.sent
+
+
+# --------------------------------------------------------------------------
+# Phase 4: pairing cannot be brute-forced
+# --------------------------------------------------------------------------
+def test_claim_is_locked_after_five_wrong_codes(tmp_path):
+    from owner import MAX_CLAIM_ATTEMPTS, OwnerStore
+
+    owners = OwnerStore(tmp_path / "owner.json")
+    code = owners.start_pairing()
+    for _ in range(MAX_CLAIM_ATTEMPTS):
+        assert owners.claim(STRANGER, "wrong") is False
+    assert owners.claim_locked(STRANGER) is True
+    assert owners.claim(STRANGER, code) is False        # even the real code is refused
+    assert owners.owner_id is None
+
+
+def test_a_correct_code_before_the_cap_still_works(tmp_path):
+    from owner import OwnerStore
+
+    owners = OwnerStore(tmp_path / "owner.json")
+    code = owners.start_pairing()
+    assert owners.claim(STRANGER, "wrong") is False
+    assert owners.claim(OWNER, code) is True
+    assert owners.owner_id == OWNER
+
+
+def test_failed_claims_are_logged_without_the_code(tmp_path, caplog):
+    from owner import OwnerStore
+
+    owners = OwnerStore(tmp_path / "owner.json")
+    owners.start_pairing()
+    secret_guess = "deadbeefdeadbeef"
+    with caplog.at_level("WARNING"):
+        owners.claim(STRANGER, secret_guess)
+    assert "failed pairing attempt" in caplog.text
+    assert secret_guess not in caplog.text
+
+
+def test_a_stranger_cannot_lock_the_real_owner_out(tmp_path):
+    from owner import MAX_CLAIM_ATTEMPTS, OwnerStore
+
+    owners = OwnerStore(tmp_path / "owner.json")
+    code = owners.start_pairing()
+    for _ in range(MAX_CLAIM_ATTEMPTS):
+        owners.claim(STRANGER, "wrong")
+    assert owners.claim_locked(STRANGER) is True
+    assert owners.claim_locked(OWNER) is False
+    assert owners.claim(OWNER, code) is True        # the real owner still gets in

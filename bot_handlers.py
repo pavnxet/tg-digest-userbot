@@ -307,6 +307,15 @@ class BotApp:
         if self.owners.claim(getattr(event, "sender_id", 0), code):
             self.log.info("owner paired successfully")  # no id, no code
             await self._respond(event, "✅ Paired. अब आप owner हैं। /help देखें।")
+            return
+        if self.owners.claim_locked(getattr(event, "sender_id", None)):
+            await self._respond(
+                event,
+                "❌ बहुत ज़्यादा गलत कोशिशें। इस chat से pairing अब बंद है।\n"
+                "Bot को restart करें; terminal पर नया code दिखेगा।",
+            )
+        elif self.owners.needs_pairing():
+            await self._respond(event, "❌ Code गलत है। Terminal पर दिखाया गया code भेजें।")
 
     # -------------------------------------------------------------- commands
     async def cmd_start(self, event: Any) -> None:

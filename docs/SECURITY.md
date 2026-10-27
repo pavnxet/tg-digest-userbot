@@ -37,7 +37,20 @@ bot you created in @BotFather. The design is built around these facts:
 - **One-time pairing.** If `OWNER_ID` is unset, a random code is printed to the
   **terminal only**. The first user to send `/claim <code>` becomes the owner; the
   code is invalidated immediately and can never be reused. The code is never sent
-  in the chat.
+  in the chat. After **5 wrong guesses** the bot stops accepting claims until it is
+  restarted (a fresh code is printed then); failures are logged as a count only.
+- **Owner file is atomic and fails closed.** `owner.json` is written to a temp file
+  and `os.replace`d into place, so a crash cannot leave a half-written file. If the
+  file exists but cannot be read, the bot does **not** fall back to pairing — it
+  treats nobody as the owner, ignores every message, and prints how to fix it in the
+  terminal. A damaged file can never hand the bot to someone else.
+- **Buttons cannot go stale.** Inline buttons carry short tokens bound to the item
+  they were created for (a channel line, a file path, a filter), never a live index,
+  and expire. A button from an old message can never act on a different channel or
+  file; it replies that it is out of date.
+- **Destructive actions always confirm.** `/remove`, `/clean`, per-file delete,
+  `/logout`, `/panic` and `/schedule remove` ask for an inline confirmation, and the
+  confirmation callback passes the same owner check and expires after 60 seconds.
 - **Message hygiene.** Every sensitive incoming message (phone, code, password,
   `/claim`) is deleted right after it is read. Deletion is best-effort: if it
   fails, the bot tells you to delete it manually and logs the failure **without
@@ -55,6 +68,10 @@ bot you created in @BotFather. The design is built around these facts:
   user client only for login / status / logout and disconnects afterwards, so it
   will not fight with a running scraper. A locked session produces a clear
   message instead of a crash.
+- **Files stay in their folder.** `/clean`, per-file delete and the retention job
+  only ever touch the configured output folder, never follow a symlink out of it,
+  and never delete `.cache/run_history.json` or `.cache/run.lock` (wiping those
+  would reset the daily and minimum-gap run limits).
 
 ## What this cannot protect against
 
