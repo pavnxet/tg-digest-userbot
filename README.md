@@ -210,7 +210,7 @@ the line (the scraper skips it and reports it as `paused`).
 ### Running
 | Command | What it does |
 |---|---|
-| `/run <window> [group:<tag>] [channel:<n>] [dedupe] [min:<N>] [views] [send:no] [resume]` | Run the scraper. Window: `today`, `yesterday`, `6h`, `24h`, `3d`, `since-last`, `all`, or `YYYY-MM-DD HH:MM YYYY-MM-DD HH:MM` (IST). |
+| `/run <window> [group:<tag>] [channel:<n>] [dedupe] [min:<N>] [views] [send:no] [resume]` | Run the scraper. Window: `today`, `yesterday`, `since-last`, `all`, any duration (`6h`, `24h`, `5d`, `1w` — hours/days/weeks), or `YYYY-MM-DD HH:MM YYYY-MM-DD HH:MM` (IST). |
 | `/history <#\|@name\|link> [dedupe] [min:<N>] [views] [send:yes]` | Scrape one channel's **entire history**. Long-running; the file is not sent unless you add `send:yes`. |
 | `/stop` | Kill the whole run process tree. |
 | `/preview <window> [group:<tag>]` | Dry-run; shows message counts per channel. No file. |
@@ -248,7 +248,7 @@ python main.py --all-history --channels-file one_channel.txt
 ```
 
 ### Schedules (IST, max 5)
-`/schedule add <HH:MM> <window> [group:<tag>]`, `/schedule list`,
+`/schedule add <HH:MM> <window> [group:<tag>]` (any window, e.g. `09:00 5d`), `/schedule list`,
 `/schedule remove <n | HH:MM>` (confirms), `/schedule pause <n | HH:MM>`,
 `/schedule resume <n | HH:MM>`. The time form is stable — numbers shift after a
 removal — and every change shows you the updated list.

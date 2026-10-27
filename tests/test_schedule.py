@@ -288,3 +288,16 @@ def test_pause_names_the_schedule(tmp_path):
     ok, message = store.set_paused(1, True)
     assert ok is True
     assert "09:10" in message and "pause" in message
+
+
+def test_schedule_accepts_any_duration(tmp_path):
+    store = ScheduleStore(tmp_path / "schedule.json")
+    assert store.add("09:00", "5d")[0] is True
+    assert store.add("10:00", "12h")[0] is True
+
+
+def test_schedule_bare_number_asks_for_a_unit(tmp_path):
+    store = ScheduleStore(tmp_path / "schedule.json")
+    ok, message = store.add("09:00", "5")
+    assert ok is False
+    assert "unit" in message and "5h" in message and "5d" in message

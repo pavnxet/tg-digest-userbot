@@ -159,3 +159,41 @@ def test_missing_window_error_is_actionable():
     assert "window" in message
     assert "उदाहरण" in message        # shows a working example
     assert "3d" in message            # lists the valid windows
+
+
+# --------------------------------------------------------------------------
+# Any duration, not just 6h/24h/3d (reported: "/schedule add 09:00 5")
+# --------------------------------------------------------------------------
+@pytest.mark.parametrize("text,expected", [
+    ("5d", ["--last", "5d"]),
+    ("12h", ["--last", "12h"]),
+    ("1w", ["--last", "1w"]),
+    ("30d channel:2", ["--last", "30d"]),
+])
+def test_any_duration_is_accepted(settings, text, expected):
+    argv, _send = build_argv(text, settings, subset_writer=lambda t: ("/tmp/x.txt", None))
+    for fragment in expected:
+        assert fragment in argv
+
+
+def test_a_bare_number_asks_for_a_unit():
+    with pytest.raises(ArgError) as exc:
+        parse_window("5")
+    message = str(exc.value)
+    assert "unit" in message and "5h" in message and "5d" in message
+
+
+def test_absurd_durations_are_rejected():
+    with pytest.raises(ArgError):
+        parse_window("0d")
+    with pytest.raises(ArgError):
+        parse_window("400d")
+
+
+def test_is_valid_window_helper():
+    from run_args import is_valid_window
+
+    for good in ("today", "all", "6h", "5d", "2w"):
+        assert is_valid_window(good) is True
+    for bad in ("", "5", "banana", "0h", "400d"):
+        assert is_valid_window(bad) is False

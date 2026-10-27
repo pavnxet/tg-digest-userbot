@@ -11,7 +11,32 @@ from typing import Callable, Optional
 from timeutil import get_tz, parse_local_datetime
 
 WINDOW_TOKENS = ("today", "yesterday", "6h", "24h", "3d", "since-last", "all")
-DURATIONS = ("6h", "24h", "3d")
+DURATIONS = ("6h", "24h", "3d")          # the examples we show
+MAX_DURATION_DAYS = 365
+_DURATION_RE = re.compile(r"^(\d{1,4})([hdw])$")
+
+
+def _duration(token: str) -> Optional[list[str]]:
+    """`5d` -> ["--last", "5d"].
+
+    Any <N>h|d|w up to a year, not just the three examples -- `main.py` has
+    always accepted these via `parse_duration`; only the bot's allowlist was
+    narrower.
+    """
+    match = _DURATION_RE.match((token or "").strip().lower())
+    if match is None:
+        return None
+    amount, unit = int(match.group(1)), match.group(2)
+    hours = amount * {"h": 1, "d": 24, "w": 168}[unit]
+    if amount <= 0 or hours > MAX_DURATION_DAYS * 24:
+        return None
+    return ["--last", f"{amount}{unit}"]
+
+
+def is_valid_window(token: str) -> bool:
+    """True for a keyword window or any <N>h|d|w duration."""
+    low = (token or "").strip().lower()
+    return low in WINDOW_TOKENS or _duration(low) is not None
 _WINDOW_FLAGS = {
     "today": ["--today"],
     "yesterday": ["--yesterday"],
@@ -20,7 +45,8 @@ _WINDOW_FLAGS = {
 }
 _DT_ANY = re.compile(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\s+(\d{4}-\d{2}-\d{2} \d{2}:\d{2})")
 WINDOW_HELP = (
-    "window में से एक: today · yesterday · 6h · 24h · 3d · since-last · all\n"
+    "window: today · yesterday · since-last · all\n"
+    "या कोई अवधि — 6h, 24h, 5d, 1w (h = घंटे, d = दिन, w = हफ़्ते)\n"
     "या दो तारीख़ें: 2026-10-17 06:00 2026-10-18 18:00"
 )
 
@@ -56,13 +82,16 @@ def parse_window(text: str, tz=None) -> tuple[list[str], str]:
     words = text.split()
     for index, word in enumerate(words):
         low = word.lower()
-        fragment = _WINDOW_FLAGS.get(low)
-        if fragment is None and low in DURATIONS:
-            fragment = ["--last", low]
+        fragment = _WINDOW_FLAGS.get(low) or _duration(low)
         if fragment is not None:
             rest = " ".join(words[:index] + words[index + 1:]).strip()
             return list(fragment), rest
 
+    # A bare number is almost always a duration missing its unit.
+    if any(word.isdigit() for word in words):
+        raise ArgError(
+            "window में unit डालें — घंटे के लिए h, दिन के लिए d (जैसे 5h या 5d)।\n" + WINDOW_HELP
+        )
     raise ArgError("window नहीं मिला।\n" + WINDOW_HELP + "\nउदाहरण: /run 3d channel:5")
 
 

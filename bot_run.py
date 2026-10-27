@@ -201,7 +201,8 @@ class RunPanel:
         text = self._arg(event)
         if not text:
             await self.app._respond(event, "उपयोग: /run <window> [group:<tag>] [channel:<n>] [dedupe] [min:<N>] [views] [send:no] [resume]\n"
-                                           "window: today | yesterday | 6h | 24h | 3d | since-last | all | <YYYY-MM-DD HH:MM> x2")
+                                           "window: today | yesterday | since-last | all | कोई अवधि (6h, 24h, 5d, 1w) "
+                                           "| <YYYY-MM-DD HH:MM> x2")
             return
         error = await self.start_run(text, event.chat_id)
         if error:

@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-from run_args import WINDOW_TOKENS
+from run_args import is_valid_window
 from timeutil import get_tz
 
 _log = logging.getLogger("tgdigest.bot.schedule")
@@ -68,8 +68,16 @@ class ScheduleStore:
             return False, "समय HH:MM (IST) में दें, जैसे 09:00।"
         if not window:
             return False, "window चाहिए, जैसे today या 24h।"
-        if window not in WINDOW_TOKENS:
-            return False, "window गलत है। इनमें से एक: " + " · ".join(WINDOW_TOKENS)
+        if not is_valid_window(window):
+            if (window or "").strip().isdigit():
+                return False, (
+                    f"window में unit डालें — '{window}' की जगह '{window}h' (घंटे) "
+                    f"या '{window}d' (दिन)।"
+                )
+            return False, (
+                "window गलत है। today · yesterday · since-last · all, "
+                "या कोई अवधि जैसे 6h, 24h, 5d, 1w"
+            )
         if any(item.time == time for item in self._items):
             # Two runs at the same minute collide with the 5-minute gap, so the
             # second would be refused anyway -- catch it here instead.
