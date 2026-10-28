@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tg-digest-userbot"
-version = "2.0.1"
+version = "2.0.2"
 description = "A read-only Telegram channel scraper with an owner-only control bot. Collects messages into digest JSON with an embedded summary prompt, driven from Telegram."
 readme = "README.md"
 requires-python = ">=3.10"

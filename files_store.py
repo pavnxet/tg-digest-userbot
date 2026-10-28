@@ -36,7 +36,21 @@ def _message_count(path: Path) -> int:
         if path.suffix == ".json":
             return int(json.loads(path.read_text(encoding="utf-8")).get("meta", {}).get("messages_total", 0))
         if path.suffix == ".jsonl":
-            return sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
+            # JSONL is a meta line plus one record per message; counting raw lines
+            # was off by one. Trust meta.messages_total when it is there.
+            records = []
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    records.append(json.loads(line))
+                except ValueError:
+                    continue
+            for record in records:
+                meta = record.get("meta")
+                if isinstance(meta, dict) and "messages_total" in meta:
+                    return int(meta["messages_total"])
+            return sum(1 for record in records if "text" in record)
     except (OSError, ValueError, TypeError):
         pass
     return 0

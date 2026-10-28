@@ -71,7 +71,11 @@ def _split_line(raw: str) -> tuple[str, Optional[str], list[str], bool]:
         if low == "off":
             paused = True
         elif low.startswith("tags="):
-            tags = [t.strip() for t in piece[5:].split(",") if t.strip()]
+            # `a | tags=x | tags=y` keeps both -- it used to overwrite.
+            for tag in piece[5:].split(","):
+                tag = tag.strip()
+                if tag and tag not in tags:
+                    tags.append(tag)
         else:
             label_parts.append(piece)
     label = "|".join(label_parts) if label_parts else None

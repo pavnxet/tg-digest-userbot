@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.0.2 — PR #1 merged
+
+The audit report (`BUG_REPORT.md`) and its reproductions now live in the repo,
+and every finding it listed is fixed. The `xfail(strict=True)` markers are gone:
+the tests assert the correct behaviour and pass, so they now guard against
+regressions instead of documenting bugs.
+
+Two findings needed a second pass, both caught by the PR's own tests:
+
+- **`/files` miscounted `.jsonl` digests** — it counted raw lines, including the
+  meta line, so one message showed as two. It now trusts `meta.messages_total`
+  and otherwise counts message records.
+- **A channel line with two `tags=` segments kept only the last** —
+  `@news | tags=jobs,delhi | tags=urgent` silently lost `jobs,delhi`. All
+  segments are merged now.
+
 ## 2.0.1 — PR #1 audit fixes
 
 Every finding from the independent audit in PR #1, fixed with a test each.

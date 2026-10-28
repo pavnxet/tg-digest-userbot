@@ -1,21 +1,16 @@
-"""Reproductions for the findings in BUG_REPORT.md (2026-10-27).
+"""Regression tests for the findings in BUG_REPORT.md (2026-10-27).
 
-Each test asserts the **correct** behaviour, so it fails while its bug is
-present and passes once the bug is fixed. Every test is marked
-``xfail(strict=True)``: the suite stays green today, and fixing a bug turns its
-entry into an XPASS failure, which is the signal to delete the marker (the same
-convention tests/BUGS.md used for the v1 QA pass).
-
-Run just these:  pytest tests/test_reported_bugs.py -v
-See them fail:   pytest tests/test_reported_bugs.py --runxfail
+Each test asserts the **correct** behaviour. They were delivered in PR #1 as
+``xfail(strict=True)`` reproductions; every finding has since been fixed in
+main, so the markers are gone and these now guard against a regression.
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
 from pathlib import Path
 
-import pytest
 
 from conftest import run_main
 from fake_bot_client import FakeEvent, build_app
@@ -62,7 +57,6 @@ def _jsonl_digest(directory: Path) -> Path:
 # ---------------------------------------------------------------------------
 # BUG-01 — /add writes the label twice
 # ---------------------------------------------------------------------------
-@pytest.mark.xfail(strict=True, reason=BUG1)
 def test_add_with_a_label_stores_the_label_once(tmp_path):
     from channel_store import ChannelStore
 
@@ -75,7 +69,6 @@ def test_add_with_a_label_stores_the_label_once(tmp_path):
     assert store.entries()[-1].label == "Daily News"
 
 
-@pytest.mark.xfail(strict=True, reason=BUG1)
 def test_add_with_an_off_marker_writes_it_once(tmp_path):
     from channel_store import ChannelStore
 
@@ -91,7 +84,6 @@ def test_add_with_an_off_marker_writes_it_once(tmp_path):
 # ---------------------------------------------------------------------------
 # BUG-02 — one file per channel, but Devanagari titles all sanitise to "channel"
 # ---------------------------------------------------------------------------
-@pytest.mark.xfail(strict=True, reason=BUG2)
 def test_per_channel_files_do_not_overwrite_each_other(tmp_path):
     import main
     from timeutil import get_tz
@@ -119,7 +111,6 @@ def test_per_channel_files_do_not_overwrite_each_other(tmp_path):
 # ---------------------------------------------------------------------------
 # BUG-03 / BUG-04 — the .jsonl output format
 # ---------------------------------------------------------------------------
-@pytest.mark.xfail(strict=True, reason=BUG3)
 def test_find_searches_jsonl_digests(tmp_path):
     from files_store import find
 
@@ -128,7 +119,6 @@ def test_find_searches_jsonl_digests(tmp_path):
     assert len(find("admit", tmp_path / "output")) == 1
 
 
-@pytest.mark.xfail(strict=True, reason=BUG4)
 def test_files_panel_counts_jsonl_messages(tmp_path):
     from files_store import _message_count
 
@@ -140,7 +130,6 @@ def test_files_panel_counts_jsonl_messages(tmp_path):
 # ---------------------------------------------------------------------------
 # BUG-05 — autodelete_minutes is documented but never deletes anything
 # ---------------------------------------------------------------------------
-@pytest.mark.xfail(strict=True, reason=BUG5)
 def test_autodelete_removes_the_digest_it_sent(tmp_path, monkeypatch):
     import bot_run
 
@@ -183,7 +172,6 @@ def test_autodelete_removes_the_digest_it_sent(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 # BUG-06 — a dry run is charged against the 5-minute / 12-a-day run limits
 # ---------------------------------------------------------------------------
-@pytest.mark.xfail(strict=True, reason=BUG6)
 def test_preview_does_not_use_up_the_run_slot(tmp_path):
     script = _make_script(tmp_path, "print('  OK    News  (~12 message(s) in window)')\n")
     app, bot, _user, _owners, _session = build_app(
@@ -203,7 +191,6 @@ def test_preview_does_not_use_up_the_run_slot(tmp_path):
 # ---------------------------------------------------------------------------
 # BUG-07 — resume tokens point at a shared, overwritten channels file
 # ---------------------------------------------------------------------------
-@pytest.mark.xfail(strict=True, reason=BUG7)
 def test_history_resume_points_at_the_channel_it_was_created_for(tmp_path):
     script = _make_script(tmp_path, "import sys\nsys.exit(1)\n")
     app, bot, _user, _owners, _session = build_app(
@@ -232,7 +219,6 @@ def test_history_resume_points_at_the_channel_it_was_created_for(tmp_path):
 # ---------------------------------------------------------------------------
 # BUG-08 — an unrelated command tears down the user client mid-login
 # ---------------------------------------------------------------------------
-@pytest.mark.xfail(strict=True, reason=BUG8)
 def test_browsing_channels_does_not_abort_a_login_in_progress(tmp_path):
     app, bot, _user, _owners, _session = build_app(tmp_path, channels_text="@somechannel\n")
 
@@ -253,7 +239,6 @@ def test_browsing_channels_does_not_abort_a_login_in_progress(tmp_path):
 # ---------------------------------------------------------------------------
 # BUG-09 — --since-last-run loses a window when everything failed
 # ---------------------------------------------------------------------------
-@pytest.mark.xfail(strict=True, reason=BUG9)
 def test_a_run_where_every_channel_failed_does_not_advance_since_last_run(
     project, fake_client, monkeypatch
 ):
@@ -267,7 +252,6 @@ def test_a_run_where_every_channel_failed_does_not_advance_since_last_run(
 # ---------------------------------------------------------------------------
 # BUG-10 — the store's line parser disagrees with the digest's line parser
 # ---------------------------------------------------------------------------
-@pytest.mark.xfail(strict=True, reason=BUG10)
 def test_channel_edits_keep_every_tag(tmp_path):
     from channel_store import ChannelStore
     from channels import parse_channel_line
