@@ -116,36 +116,90 @@ def find(
     since = now - timedelta(hours=window_hours) if window_hours else None
     matches: list[dict] = []
     for info in list_outputs(output_dir):
-        if info.path.suffix not in (".json", ".jsonl"):
-            continue
         try:
-            data = json.loads(info.path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+            raw_text = info.path.read_text(encoding="utf-8")
+        except OSError:
             continue
-        for channel in data.get("channels", []):
-            link_base = channel.get("link_base", "")
-            name = channel.get("name") or channel.get("label") or channel.get("username") or "?"
-            for message in channel.get("messages", []):
-                text = message.get("text") or ""
-                if needle not in _normalise(text):
+        documents: list[dict] = []
+        if info.path.suffix == ".json":
+            try:
+                documents = [json.loads(raw_text)]
+            except ValueError:
+                continue
+        elif info.path.suffix == ".jsonl":
+            # JSONL is one record per *message* ({"channel", "id", "link_base",
+            # "text"}), plus a meta line -- so json.loads on the file always failed.
+            for line in raw_text.splitlines():
+                if not line.strip():
                     continue
-                when = message.get("t")
+                try:
+                    record = json.loads(line)
+                except ValueError:
+                    continue
+                text = record.get("text")
+                if not isinstance(text, str) or needle not in _normalise(text):
+                    continue
+                when = record.get("t") or record.get("date")
                 if since is not None and when:
                     try:
-                        stamp = datetime.fromisoformat(when)
+                        stamp = datetime.fromisoformat(str(when))
                         if stamp.tzinfo is None:
                             stamp = stamp.replace(tzinfo=tz)
                         if stamp < since:
                             continue
                     except ValueError:
                         pass
-                snippet = " ".join(text.split())[:SNIPPET_CHARS]
+                link_base = record.get("link_base") or ""
                 matches.append({
-                    "channel": name,
+                    "channel": record.get("channel") or "?",
                     "time": when,
-                    "snippet": snippet,
-                    "link": f"{link_base}{message.get('id', '')}" if link_base else "",
+                    "snippet": " ".join(text.split())[:SNIPPET_CHARS],
+                    "link": f"{link_base}{record.get('id', '')}" if link_base else "",
                 })
                 if len(matches) >= limit:
                     return matches
+            continue
+        elif info.path.suffix == ".txt":
+            for line in raw_text.splitlines():
+                if needle not in _normalise(line):
+                    continue
+                matches.append({
+                    "channel": "?",
+                    "time": None,
+                    "snippet": " ".join(line.split())[:SNIPPET_CHARS],
+                    "link": "",
+                })
+                if len(matches) >= limit:
+                    return matches
+            continue
+        else:
+            continue
+        for data in documents:
+            for channel in data.get("channels", []):
+                link_base = channel.get("link_base", "")
+                name = (channel.get("name") or channel.get("label")
+                        or channel.get("username") or "?")
+                for message in channel.get("messages", []):
+                    text = message.get("text") or ""
+                    if needle not in _normalise(text):
+                        continue
+                    when = message.get("t")
+                    if since is not None and when:
+                        try:
+                            stamp = datetime.fromisoformat(when)
+                            if stamp.tzinfo is None:
+                                stamp = stamp.replace(tzinfo=tz)
+                            if stamp < since:
+                                continue
+                        except ValueError:
+                            pass
+                    snippet = " ".join(text.split())[:SNIPPET_CHARS]
+                    matches.append({
+                        "channel": name,
+                        "time": when,
+                        "snippet": snippet,
+                        "link": f"{link_base}{message.get('id', '')}" if link_base else "",
+                    })
+                    if len(matches) >= limit:
+                        return matches
     return matches

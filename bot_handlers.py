@@ -190,6 +190,11 @@ class BotApp:
         manager = getattr(panel, "rm", None) if panel is not None else None
         return bool(manager is not None and manager.running)
 
+    @property
+    def login_active(self) -> bool:
+        """True while a login flow owns the user client."""
+        return bool(getattr(self.manager, "active", False))
+
     async def handle(self, event: Any) -> None:
         """Message entry point. Owner-checked; groups/channels ignored."""
         if not getattr(event, "is_private", False):
@@ -404,6 +409,9 @@ class BotApp:
                                    "मैं इसे तुरंत delete कर दूँगा।")
 
     async def cmd_status(self, event: Any) -> None:
+        if self.login_active:
+            await self._respond(event, "Login चल रहा है — पहले पूरा करें या /cancel भेजें।")
+            return
         try:
             await self.user.connect()
         except SessionLockedError:

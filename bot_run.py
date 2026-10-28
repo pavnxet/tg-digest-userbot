@@ -242,10 +242,42 @@ class RunPanel:
         if result.result not in ("timeout", "failed", "stopped") or not self._last_argv:
             return None
         token = secrets.token_urlsafe(6)
-        self._resume[token] = (list(self._last_argv), self._last_send_files, time.time() + RESUME_TTL_SECONDS)
+        argv = self._snapshot_channels_file(list(self._last_argv), token)
+        self._resume[token] = (argv, self._last_send_files, time.time() + RESUME_TTL_SECONDS)
         while len(self._resume) > 10:
-            self._resume.pop(next(iter(self._resume)))
+            self._drop_resume(next(iter(self._resume)))
         return [[Button.inline("🔁 Resume", f"resume:{token}".encode())]]
+
+    def _snapshot_channels_file(self, argv: list[str], token: str) -> list[str]:
+        """Give this Resume its own copy of the channels file.
+
+        `history_channel.txt` / `run_channels.txt` are shared and overwritten by
+        the next run, so a button that only stored the path would scrape whatever
+        channel came next.
+        """
+        if "--channels-file" not in argv:
+            return argv
+        index = argv.index("--channels-file") + 1
+        if index >= len(argv):
+            return argv
+        try:
+            source = Path(argv[index])
+            target = self.cache_dir / f"resume_{token}.txt"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+        except OSError:
+            return argv
+        argv[index] = str(target)
+        return argv
+
+    def _drop_resume(self, token: str) -> None:
+        item = self._resume.pop(token, None)
+        if item is None:
+            return
+        for argument in item[0]:
+            if isinstance(argument, str) and argument.startswith(str(self.cache_dir / "resume_")):
+                with contextlib.suppress(OSError):
+                    Path(argument).unlink()
 
     async def _cb_resume(self, event: Any, rest: bytes) -> None:
         """Continue the run this button was made for, from its checkpoint."""
@@ -299,23 +331,32 @@ class RunPanel:
             await self.app.bot.send_message(chat_id, f"{len(parts)} parts हैं। भेजने के लिए /last भेजें।")
             return
         total = len(parts)
+        sent_ids: list[int] = []
         for index, path in enumerate(parts, start=1):
             caption = f"part {index} of {total}" if total > 1 else path.name
             try:
-                await self.app.bot.send_file(chat_id, str(path), caption=caption)
+                message = await self.app.bot.send_file(chat_id, str(path), caption=caption)
             except Exception:  # noqa: BLE001
                 await self.app.bot.send_message(chat_id, "⚠️ file भेजने में समस्या। /last से फिर भेजें।")
                 return
-        await self._maybe_autodelete(chat_id)
+            message_id = getattr(message, "id", None)
+            if message_id is not None:
+                sent_ids.append(message_id)
+        await self._maybe_autodelete(chat_id, sent_ids)
 
-    async def _maybe_autodelete(self, chat_id: Any) -> None:
+    async def _maybe_autodelete(self, chat_id: Any, message_ids: list[int]) -> None:
+        """Delete the digests we just sent, after `autodelete_minutes`."""
         minutes = int(self.settings.get("autodelete_minutes") or 0)
-        if minutes <= 0:
+        if minutes <= 0 or not message_ids:
             return
 
         async def _later() -> None:
             await asyncio.sleep(minutes * 60)
-            _log.info("autodelete: %s digest messages would be removed", len(self._last_outputs))
+            try:
+                await self.app.bot.delete_messages(chat_id, list(message_ids))
+                _log.info("autodelete: removed %s digest message(s)", len(message_ids))
+            except Exception:  # noqa: BLE001 - best effort, never crash the bot
+                _log.warning("autodelete failed; the digest messages stay in the chat")
 
         self._autodelete_task = asyncio.create_task(_later())
 
@@ -345,7 +386,7 @@ class RunPanel:
         except ArgError as exc:
             await self.app._respond(event, f"❌ {exc}")
             return
-        refusal = await self.rm.start([*argv, "--dry-run"], capture=True)
+        refusal = await self.rm.start([*argv, "--dry-run"], capture=True, dry_run=True)
         if refusal is not None:
             await self.app._respond(event, f"❌ {refusal.reason}")
             return

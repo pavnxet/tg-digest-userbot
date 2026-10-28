@@ -259,7 +259,11 @@ class ChannelStore:
             if len(self.entries()) >= self.max_entries:
                 raise ChannelError(f"सूची भर गई (max {self.max_entries})।")
             lines, newline, _ = self._read_lines()
-            lines.append(render_line(spec.raw, label or spec.label, list(tags or spec.tags), spec.paused))
+            # `spec.raw` still carries the '| label' part; write the entry alone
+            # so the label is not duplicated.
+            entry_text = text.split("|", 1)[0].strip()
+            lines.append(render_line(entry_text, label or spec.label,
+                                     list(tags or spec.tags), spec.paused))
             self._write_lines(lines, newline, True)
             return AddResult(True, "जोड़ दिया। / added.")
         finally:

@@ -81,5 +81,28 @@ def get_run_id(cache_dir: Path) -> Optional[str]:
     return value or None
 
 
+def save_window(cache_dir: Path, run_id: str, since: datetime, until: datetime) -> None:
+    """Pin the window a run started with, so --resume can reuse it."""
+    data = {"since": since.isoformat(), "until": until.isoformat()}
+    _atomic_write_text(
+        Path(cache_dir) / f"{run_id}.window.json",
+        json.dumps(data, ensure_ascii=False),
+    )
+
+
+def load_window(cache_dir: Path, run_id: Optional[str]) -> Optional[tuple[datetime, datetime]]:
+    """The window pinned by save_window, or None."""
+    if not run_id:
+        return None
+    file = Path(cache_dir) / f"{run_id}.window.json"
+    if not file.exists():
+        return None
+    try:
+        data = json.loads(file.read_text(encoding="utf-8"))
+        return datetime.fromisoformat(data["since"]), datetime.fromisoformat(data["until"])
+    except (OSError, ValueError, KeyError):
+        return None
+
+
 def set_run_id(cache_dir: Path, run_id: str) -> None:
     _atomic_write_text(Path(cache_dir) / "last_run_id.txt", run_id)

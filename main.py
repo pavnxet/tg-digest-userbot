@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import contextlib
 import json
 import random
@@ -63,7 +64,7 @@ from logging_setup import setup_logging
 from prompts import PromptError, available_names, default_prompt, load_prompt
 from scraper import ScrapeOptions, count_channel, scrape_channel
 from splitter import split_digest
-from timeutil import get_tz, resolve_window
+from timeutil import Window, get_tz, resolve_window
 
 
 # --------------------------------------------------------------------------
@@ -106,8 +107,17 @@ class Checkpoint:
 # Output
 # --------------------------------------------------------------------------
 def _safe_name(name: str) -> str:
-    slug = re.sub(r"[^A-Za-z0-9_-]+", "_", name).strip("_")
-    return (slug[:40] or "channel")
+    """A filesystem-safe stem that is still unique per channel.
+
+    A purely non-ASCII name (every Devanagari title) slugged to "", which made
+    every such channel land in the same file -- one channel's text was lost.
+    """
+    slug = re.sub(r"[^A-Za-z0-9_-]+", "_", name).strip("_")[:40]
+    if slug:
+        return slug
+    # usedforsecurity=False: this is a filename suffix, not a security hash.
+    digest = hashlib.sha1(name.encode("utf-8"), usedforsecurity=False).hexdigest()[:8]
+    return "channel_" + digest
 
 
 def render_part(part: dict[str, Any], fmt: str, pretty: bool) -> str:
@@ -158,9 +168,19 @@ def write_outputs(
     ext = args.format
     written: list[tuple[Path, str]] = []
 
+    used: set[str] = set()
+
     def emit(name: str, part: dict[str, Any]) -> None:
         text = render_part(part, args.format, args.pretty)
         path = out_dir / name
+        if path.name in used:
+            # Two titles can slug to the same name ("A B" / "A-B"): never let one
+            # channel overwrite another.
+            counter = 2
+            while f"{path.stem}_{counter}{path.suffix}" in used:
+                counter += 1
+            path = out_dir / f"{path.stem}_{counter}{path.suffix}"
+        used.add(path.name)
         path.write_text(text, encoding="utf-8")
         written.append((path, text))
 
@@ -299,17 +319,23 @@ async def run(args: argparse.Namespace) -> int:
             print(f"Warning: --since-last-run cannot be used ({problem}); falling back to --last 24h.")
             args.since_last_run = False
             args.last = "24h"
-    window = resolve_window(
-        today=args.today,
-        yesterday=args.yesterday,
-        last=args.last,
-        since=args.since,
-        until=args.until,
-        since_last_run=args.since_last_run,
-        all_history=all_history,
-        last_run=last_run,
-        tz=tz,
-    )
+    # --resume must cover the *same* period as the interrupted run; re-resolving a
+    # relative window against "now" would splice two different windows together.
+    pinned = state_mod.load_window(CACHE_DIR, state_mod.get_run_id(CACHE_DIR)) if args.resume else None
+    if pinned is not None:
+        window = Window(since=pinned[0], until=pinned[1])
+    else:
+        window = resolve_window(
+            today=args.today,
+            yesterday=args.yesterday,
+            last=args.last,
+            since=args.since,
+            until=args.until,
+            since_last_run=args.since_last_run,
+            all_history=all_history,
+            last_run=last_run,
+            tz=tz,
+        )
     log.info("Window UTC: %s .. %s", window.since.isoformat(), window.until.isoformat())
     if all_history:
         print("Full-history mode: reading every message (no per-channel cap). "
@@ -410,6 +436,8 @@ async def run(args: argparse.Namespace) -> int:
             run_id = datetime.now(tz).strftime("%Y%m%d_%H%M%S")
             state_mod.set_run_id(CACHE_DIR, run_id)
         set_log_run_id(run_id)  # every log line from here on carries this run id
+        if not args.resume:
+            state_mod.save_window(CACHE_DIR, run_id, window.since, window.until)
         checkpoint = Checkpoint(CACHE_DIR / f"{run_id}.jsonl")
         done = checkpoint.load_done() if args.resume else {}
 
@@ -478,8 +506,10 @@ async def run(args: argparse.Namespace) -> int:
         combined_text = "\n".join(text for _, text in written)
         estimate = estimate_tokens(combined_text)
 
-        # Update state ONLY now that the output is safely on disk.
-        if not args.dry_run:
+        # Update state ONLY when at least one channel was actually read. A run
+        # where everything failed must not move the --since-last-run marker, or
+        # that window would be skipped forever.
+        if not args.dry_run and results:
             state_mod.set_last_run(STATE_PATH, window.until, tz)
 
         print()
@@ -494,6 +524,13 @@ async def run(args: argparse.Namespace) -> int:
         print(f"estimated tokens (Devanagari, chars/1.5): ~{estimate['est_tokens_devanagari']:,}")
         print(f"estimated tokens (primary, ratio={estimate['devanagari_ratio']}): "
               f"~{estimate['est_tokens_primary']:,}")
+        if not results:
+            print(
+                f"\nNo channel could be read ({len(skipped)} skipped). "
+                "state.json was not advanced, so --since-last-run will retry this window.",
+                file=sys.stderr,
+            )
+            return 1
         return 0
     finally:
         await client.disconnect()

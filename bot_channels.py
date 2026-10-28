@@ -105,7 +105,7 @@ class ChannelPanel:
         Never runs while a scrape is active: two processes on one SQLite session
         is exactly what the architecture forbids.
         """
-        if getattr(self.app, "run_active", False):
+        if getattr(self.app, "run_active", False) or getattr(self.app, "login_active", False):
             return
         missing = [
             e for e in entries
@@ -182,8 +182,8 @@ class ChannelPanel:
         if spec is None or spec.kind == "invalid":
             return None
         info = {"spec": spec, "title": None, "member": None, "id": None, "unverified": False}
-        if getattr(self.app, "run_active", False):
-            # A scrape owns the session right now; verify later instead of fighting it.
+        if getattr(self.app, "run_active", False) or getattr(self.app, "login_active", False):
+            # A scrape or a login owns the session; verify later instead of fighting it.
             info["unverified"] = True
             return info
         try:

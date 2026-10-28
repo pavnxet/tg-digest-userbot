@@ -173,7 +173,8 @@ def test_paused_channel_reported_in_meta_skipped(project, fake_client, monkeypat
     ch = make_channel(1234567890, "News", username="news")
     fake_client.add_channel(ch, [make_message(1, datetime.now(timezone.utc), text="x")])
     rc = run_main(monkeypatch, project, fake_client, ["--last", "1h"], "@news | off\n")
-    assert rc == 0
+    # Nothing was read, so the run must not report success (or advance state).
+    assert rc == 1
     import json
 
     digest = json.loads(sorted(project["out"].glob("*.json"))[0].read_text(encoding="utf-8"))

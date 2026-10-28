@@ -97,4 +97,6 @@ def test_safe_name_handles_slashes_colons_emoji_and_length():
     assert ":" not in _safe_name("a/b:c")
     assert _safe_name("🚀 rocket") != ""
     assert len(_safe_name("x" * 200)) <= 40
-    assert _safe_name("") == "channel"
+    assert _safe_name("") != ""
+    # Names with no ASCII at all must stay distinct, or one file overwrites another.
+    assert _safe_name("\u0930\u093e\u091c\u0938\u094d\u0925\u093e\u0928") != _safe_name("\u0935\u094d\u092e\u0942")

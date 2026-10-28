@@ -180,6 +180,7 @@ class RunManager:
         self._timed_out = False
         self._stopped = False
         self._run_timeout: int = self.timeout
+        self._skip_history = False
 
     # -- state -------------------------------------------------------------
     @property
@@ -203,7 +204,8 @@ class RunManager:
 
     # -- lifecycle ---------------------------------------------------------
     async def start(self, argv: list[str], capture: bool = False,
-                    timeout: Optional[int] = None) -> "Refusal | None":
+                    timeout: Optional[int] = None,
+                    dry_run: bool = False) -> "Refusal | None":
         """Start a run. Returns None on success, or a Refusal with the reason.
 
         With ``capture=True`` the child's stdout/stderr are captured (used by
@@ -212,9 +214,13 @@ class RunManager:
         """
         if self.running:
             return Refusal("एक run पहले से चल रहा है। /stop से रोकें।")
-        refusal = self.check_limits()
-        if refusal:
-            return Refusal(refusal)
+        # A dry run (/preview) reads Telegram but produces nothing, so it must not
+        # use up the 5-minute gap or the 12-per-day quota.
+        self._skip_history = dry_run
+        if not dry_run:
+            refusal = self.check_limits()
+            if refusal:
+                return Refusal(refusal)
         # Never let our own user client hold the SQLite session while main.py runs.
         if self._ensure_disconnected is not None:
             with contextlib.suppress(Exception):
@@ -272,7 +278,8 @@ class RunManager:
         started = self._started_at or time.time()
         finished = time.time()
         run = RunResult(started, finished, exit_code, result, finished - started, output)
-        self._history.record(run)
+        if not self._skip_history:
+            self._history.record(run)
         self._lock.release()
         self._proc = None
         self._started_at = None

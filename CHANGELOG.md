@@ -1,5 +1,35 @@
 # Changelog
 
+## 2.0.1 — PR #1 audit fixes
+
+Every finding from the independent audit in PR #1, fixed with a test each.
+
+**High**
+
+- `--per-channel-files` no longer loses channels: a name with no ASCII (any
+  Devanagari title) used to slug to the literal `channel`, so two such channels
+  produced one file. Non-ASCII names now get a short stable suffix, and a
+  same-run name collision falls back to `_2` instead of overwriting.
+- A run where **no channel could be read** now exits `1` and leaves
+  `state.json` alone, so `--since-last-run` retries that window instead of
+  skipping it silently.
+- `autodelete_minutes` now actually deletes the digest messages it sent
+  (it only logged "would be removed").
+- Resume buttons re-run the same channels: the button snapshots the channels
+  file, so a later `/history` for another channel can no longer change what an
+  older Resume button scrapes.
+
+**Medium**
+
+- `/add @news | label` wrote the label twice (`@news | label | label`).
+- `/find` now reads `.jsonl` (one record per message) and `.txt` digests, not
+  just `.json`.
+- `/preview` no longer consumes the 5-minute gap or the 12-per-day quota.
+- `/status`, `/channels` and `/add` no longer disconnect the user client while a
+  login is running (they used to abort the login).
+- `--resume` reuses the window the interrupted run started with, instead of
+  re-resolving a relative window against "now" and splicing two periods together.
+
 ## 2.0.0 — the "control panel" release
 
 Everything below is owner-only, private-chat only, and the user client stays
